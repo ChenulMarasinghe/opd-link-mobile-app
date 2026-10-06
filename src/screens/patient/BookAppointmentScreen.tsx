@@ -366,6 +366,7 @@ export default function BookAppointmentScreen({
                     {filteredDoctors.length} {filteredDoctors.length === 1 ? 'doctor' : 'doctors'} available
                   </Text>
                 )}
+
               </View>
             )}
           </View>
