@@ -1,6 +1,7 @@
-import BookAppointmentScreen from '@/screens/patient/BookAppointmentScreen';
+import NotificationsScreen from '@/screens/patient/NotificationsScreen';
 
 export default function HomeScreen() {
-  return <BookAppointmentScreen />;
+  return <NotificationsScreen />;
 }
+
 
