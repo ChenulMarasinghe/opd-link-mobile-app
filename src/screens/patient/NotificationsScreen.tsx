@@ -132,7 +132,7 @@ export default function NotificationsScreen({
       </View>
 
       {/* Notifications List */}
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView style={styles.notificationList} contentContainerStyle={styles.scrollContent}>
         {loading ? (
           <ActivityIndicator size="large" color="#6366F1" style={styles.loader} />
         ) : filteredNotifications.length === 0 ? (
@@ -174,15 +174,15 @@ export default function NotificationsScreen({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#EEF2FF', // Prototype soft lavender/blue tint
+    backgroundColor: '#EDF4FF',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 12,
+    paddingTop: 14,
+    paddingBottom: 10,
   },
   backButton: {
     width: 38,
@@ -191,7 +191,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
+    shadowColor: '#1E3A8A',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 3,
@@ -216,7 +216,7 @@ const styles = StyleSheet.create({
   headerSubtitle: {
     fontSize: 10,
     fontWeight: '800',
-    color: '#818CF8',
+    color: '#635BFF',
     letterSpacing: 1,
     marginTop: 1,
   },
@@ -226,7 +226,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: '#DCE8F8',
   },
   langText: {
     fontSize: 12,
@@ -240,24 +240,30 @@ const styles = StyleSheet.create({
   filterBar: {
     flexDirection: 'row',
     paddingHorizontal: 16,
-    marginVertical: 10,
+    marginTop: 8,
+    marginBottom: 12,
     gap: 10,
   },
   filterPill: {
+    minHeight: 36,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     paddingHorizontal: 18,
     paddingVertical: 8,
-    borderRadius: 20,
+    borderRadius: 18,
     backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#DCE4F0',
   },
   filterPillActive: {
-    backgroundColor: '#6366F1',
+    backgroundColor: '#635BFF',
+    borderColor: '#635BFF',
   },
   filterText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#475569',
+    color: '#52627A',
   },
   filterTextActive: {
     color: '#FFFFFF',
@@ -266,16 +272,19 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#6366F1',
+    backgroundColor: '#635BFF',
     marginLeft: 6,
   },
   filterDotActive: {
     backgroundColor: '#FFFFFF',
   },
+  notificationList: {
+    flex: 1,
+  },
   scrollContent: {
     paddingHorizontal: 16,
-    paddingTop: 6,
-    paddingBottom: 70,
+    paddingTop: 2,
+    paddingBottom: 14,
   },
   loader: {
     marginTop: 40,
@@ -283,7 +292,7 @@ const styles = StyleSheet.create({
   emptyContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 60,
+    paddingVertical: 48,
     paddingHorizontal: 20,
   },
   emptyIcon: {
@@ -293,32 +302,32 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#1E293B',
+    color: '#17243A',
     marginBottom: 4,
   },
   emptySubtitle: {
     fontSize: 13,
-    color: '#64748B',
+    color: '#66758C',
     textAlign: 'center',
     lineHeight: 18,
   },
   bannerContainer: {
-    position: 'absolute',
-    bottom: 14,
-    left: 0,
-    right: 0,
     alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 10,
+    backgroundColor: '#EDF4FF',
   },
   bannerPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFFEE',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 14,
+    paddingVertical: 9,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    shadowColor: '#000',
+    borderColor: '#DCE8F8',
+    shadowColor: '#1E3A8A',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 4,
@@ -326,12 +335,13 @@ const styles = StyleSheet.create({
   },
   bannerIcon: {
     fontSize: 12,
-    color: '#64748B',
+    color: '#66758C',
     marginRight: 6,
   },
   bannerText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '500',
-    color: '#64748B',
+    color: '#66758C',
+    textAlign: 'center',
   },
 });

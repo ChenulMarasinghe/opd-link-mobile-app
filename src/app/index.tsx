@@ -2,8 +2,8 @@ import BookAppointmentScreen from '@/screens/patient/BookAppointmentScreen';
 import ClinicStatusScreen from '@/screens/patient/ClinicStatusScreen';
 import NotificationsScreen from '@/screens/patient/NotificationsScreen';
 import ProfileSettingsScreen from '@/screens/patient/ProfileSettingsScreen';
-import { useState } from 'react';
 import { SymbolView } from 'expo-symbols';
+import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 

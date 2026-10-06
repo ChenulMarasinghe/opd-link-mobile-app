@@ -23,13 +23,13 @@ export function NotificationCard({
       case 'reminder':
         return {
           bg: '#EEF2FF',
-          color: '#6366F1',
+          color: '#635BFF',
           symbol: '🔔',
         };
       case 'queue':
         return {
-          bg: '#ECFDF5',
-          color: '#10B981',
+          bg: '#EAF3FF',
+          color: '#208AEF',
           symbol: '⏱',
         };
       case 'delay':
@@ -40,8 +40,8 @@ export function NotificationCard({
         };
       case 'confirmation':
         return {
-          bg: '#E0F2FE',
-          color: '#0284C7',
+          bg: '#EEF2FF',
+          color: '#635BFF',
           symbol: '🗓',
         };
       default:
@@ -102,38 +102,37 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 16,
-    marginBottom: 12,
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 10,
     position: 'relative',
-    shadowColor: '#000',
+    shadowColor: '#1E3A8A',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 2,
+    shadowOpacity: 0.05,
+    shadowRadius: 5,
+    elevation: 1,
     borderWidth: 1,
-    borderColor: 'transparent',
+    borderColor: '#E0E8F4',
   },
   cardUnread: {
-    borderColor: '#E0E7FF',
-    backgroundColor: '#FAFAFF',
+    borderColor: '#C9C6FF',
   },
   unreadDot: {
     position: 'absolute',
-    top: 14,
-    left: 12,
-    width: 8,
-    height: 8,
+    top: 13,
+    left: 11,
+    width: 7,
+    height: 7,
     borderRadius: 4,
-    backgroundColor: '#6366F1',
+    backgroundColor: '#635BFF',
   },
   iconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 14,
+    marginRight: 12,
     marginLeft: 4,
   },
   iconSymbol: {
@@ -145,20 +144,22 @@ const styles = StyleSheet.create({
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 4,
+    alignItems: 'flex-start',
+    marginBottom: 5,
+    gap: 8,
   },
   title: {
-    fontSize: 15,
+    minWidth: 0,
+    fontSize: 14,
     fontWeight: '700',
     color: '#0F172A',
     flex: 1,
-    marginRight: 8,
   },
   timeText: {
-    fontSize: 12,
-    color: '#94A3B8',
+    fontSize: 10,
+    color: '#8491A4',
     fontWeight: '500',
+    flexShrink: 0,
   },
   bodyRow: {
     flexDirection: 'row',
@@ -167,11 +168,12 @@ const styles = StyleSheet.create({
   },
   messageText: {
     fontSize: 13,
-    color: '#475569',
+    color: '#52627A',
     lineHeight: 18,
+    flexShrink: 1,
   },
   badgePill: {
-    backgroundColor: '#D1FAE5',
+    backgroundColor: '#EEF2FF',
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 12,
@@ -181,6 +183,6 @@ const styles = StyleSheet.create({
   badgeText: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#065F46',
+    color: '#5148D8',
   },
 });

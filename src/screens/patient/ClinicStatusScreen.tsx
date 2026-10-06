@@ -110,7 +110,7 @@ export default function ClinicStatusScreen({ onBack }: ClinicStatusScreenProps) 
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView style={styles.doctorList} contentContainerStyle={styles.scrollContent}>
         {/* Top Highlight Banner */}
         {highlightedDoctor && (
           <View style={styles.topBannerCard}>
@@ -141,7 +141,7 @@ export default function ClinicStatusScreen({ onBack }: ClinicStatusScreenProps) 
 
         {/* Doctors Status List */}
         {loading ? (
-          <ActivityIndicator size="large" color="#6366F1" style={styles.loader} />
+          <ActivityIndicator size="large" color="#635BFF" style={styles.loader} />
         ) : doctors.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyIcon}>🏥</Text>
@@ -173,15 +173,15 @@ export default function ClinicStatusScreen({ onBack }: ClinicStatusScreenProps) 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#EEF2FF', // Prototype soft lavender/blue background tint
+    backgroundColor: '#EDF4FF',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 12,
+    paddingTop: 14,
+    paddingBottom: 10,
   },
   backButton: {
     width: 38,
@@ -190,7 +190,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
+    shadowColor: '#1E3A8A',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 3,
@@ -215,7 +215,7 @@ const styles = StyleSheet.create({
   headerSubtitle: {
     fontSize: 10,
     fontWeight: '700',
-    color: '#818CF8',
+    color: '#635BFF',
     letterSpacing: 0.5,
     marginTop: 1,
   },
@@ -225,7 +225,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: '#DCE8F8',
   },
   langText: {
     fontSize: 12,
@@ -236,59 +236,68 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '400',
   },
+  doctorList: {
+    flex: 1,
+  },
   scrollContent: {
     paddingHorizontal: 16,
-    paddingTop: 6,
-    paddingBottom: 70,
+    paddingTop: 2,
+    paddingBottom: 10,
   },
   topBannerCard: {
-    backgroundColor: '#E0E7FF',
-    borderRadius: 18,
-    padding: 16,
-    marginBottom: 16,
+    backgroundColor: '#EEF2FF',
+    borderRadius: 16,
+    padding: 15,
+    marginBottom: 18,
     borderWidth: 1,
-    borderColor: '#C7D2FE',
+    borderColor: '#D7D5FF',
   },
   bannerHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 4,
+    marginBottom: 6,
   },
   bannerDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#4338CA',
+    backgroundColor: '#635BFF',
     marginRight: 8,
   },
   bannerTitle: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#3730A3',
+    color: '#302B82',
+    flexShrink: 1,
   },
   bannerSubtitle: {
     fontSize: 12,
-    color: '#4F46E5',
+    color: '#5148D8',
     marginLeft: 16,
     fontWeight: '500',
+    lineHeight: 17,
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
-    marginTop: 4,
+    marginBottom: 11,
+    marginTop: 2,
   },
   sectionTitle: {
     fontSize: 12,
     fontWeight: '800',
-    color: '#475569',
+    color: '#52627A',
     letterSpacing: 0.8,
   },
   activeTag: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#6366F1',
+    color: '#635BFF',
+    backgroundColor: '#EEF2FF',
+    borderRadius: 12,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
   },
   loader: {
     marginTop: 40,
@@ -318,32 +327,32 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#1E293B',
+    color: '#17243A',
     marginBottom: 4,
   },
   emptySubtitle: {
     fontSize: 13,
-    color: '#64748B',
+    color: '#66758C',
     textAlign: 'center',
     lineHeight: 18,
   },
   bottomBannerContainer: {
-    position: 'absolute',
-    bottom: 14,
-    left: 0,
-    right: 0,
     alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 10,
+    backgroundColor: '#EDF4FF',
   },
   bottomBannerPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFFEE',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 14,
+    paddingVertical: 9,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
-    shadowColor: '#000',
+    borderColor: '#DCE8F8',
+    shadowColor: '#1E3A8A',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 4,
@@ -351,12 +360,13 @@ const styles = StyleSheet.create({
   },
   bottomBannerIcon: {
     fontSize: 12,
-    color: '#64748B',
+    color: '#66758C',
     marginRight: 6,
   },
   bottomBannerText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '500',
-    color: '#64748B',
+    color: '#66758C',
+    textAlign: 'center',
   },
 });

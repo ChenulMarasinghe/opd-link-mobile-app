@@ -248,7 +248,7 @@ export default function BookAppointmentScreen({
 
           {onViewNotifications && (
             <Pressable
-              style={[styles.confirmActionButton, { backgroundColor: '#6366F1', marginTop: 10 }]}
+              style={[styles.confirmActionButton, { marginTop: 10 }]}
               onPress={onViewNotifications}
             >
               <Text style={styles.confirmActionButtonText}>View Notifications 🔔</Text>
@@ -279,7 +279,14 @@ export default function BookAppointmentScreen({
                 {label}
               </Text>
             </View>
-            {index < 3 && <View style={styles.stepConnector} />}
+            {index < 3 && (
+              <View
+                style={[
+                  styles.stepConnector,
+                  currentStep > index + 1 && styles.stepConnectorActive,
+                ]}
+              />
+            )}
           </React.Fragment>
         ))}
       </View>
@@ -302,7 +309,11 @@ export default function BookAppointmentScreen({
             {!loadingDoctors && departments.length > 0 && (
               <View style={styles.departmentCard}>
                 <Pressable
-                  style={[styles.departmentDropdown, departmentExpanded && styles.departmentDropdownOpen]}
+                  style={[
+                    styles.departmentDropdown,
+                    selectedDepartment && styles.departmentDropdownSelected,
+                    departmentExpanded && styles.departmentDropdownOpen,
+                  ]}
                   onPress={() => setDepartmentExpanded((expanded) => !expanded)}
                   accessibilityRole="button"
                   accessibilityLabel="Choose a department"
@@ -536,35 +547,35 @@ export default function BookAppointmentScreen({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#EDF4FF',
   },
   header: {
     paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 8,
-    backgroundColor: '#FFFFFF',
+    paddingTop: 14,
+    paddingBottom: 12,
+    backgroundColor: '#EDF4FF',
     borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
+    borderBottomColor: '#DCE8F8',
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: 19,
     fontWeight: '700',
     color: '#0F172A',
   },
   headerSubtitle: {
     fontSize: 12,
-    color: '#64748B',
+    color: '#66758C',
     marginTop: 2,
   },
   stepIndicatorContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 11,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
+    borderBottomColor: '#DCE8F8',
   },
   stepItem: {
     flex: 1,
@@ -584,69 +595,80 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   stepNumberActive: {
-    backgroundColor: '#208AEF',
+    backgroundColor: '#635BFF',
     color: '#FFFFFF',
   },
   stepLabel: {
-    maxWidth: 58,
+    maxWidth: 62,
     marginTop: 3,
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: '600',
     color: '#94A3B8',
     textAlign: 'center',
+    lineHeight: 12,
   },
   stepLabelActive: {
-    color: '#0F172A',
+    color: '#5148D8',
   },
   stepConnector: {
-    width: 14,
+    width: 12,
     height: 2,
     backgroundColor: '#E2E8F0',
+    marginBottom: 15,
+  },
+  stepConnectorActive: {
+    backgroundColor: '#635BFF',
   },
   scrollContent: {
-    padding: 16,
-    paddingBottom: 30,
+    paddingHorizontal: 16,
+    paddingTop: 18,
+    paddingBottom: 28,
   },
   stepHeader: {
-    fontSize: 18,
+    fontSize: 19,
     fontWeight: '700',
     color: '#0F172A',
   },
   stepSubheader: {
     fontSize: 13,
-    color: '#64748B',
-    marginTop: 2,
-    marginBottom: 16,
+    lineHeight: 18,
+    color: '#66758C',
+    marginTop: 4,
+    marginBottom: 18,
   },
   fieldLabel: {
     fontSize: 14,
     fontWeight: '600',
     color: '#1E293B',
-    marginBottom: 8,
+    marginBottom: 9,
   },
   departmentCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#DBEAFE',
-    padding: 12,
-    shadowColor: '#64748B',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 3,
-    elevation: 1,
+    borderColor: '#E0E8F4',
+    padding: 14,
+    shadowColor: '#1E3A8A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
   },
   departmentDropdown: {
-    minHeight: 56,
+    minHeight: 62,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    backgroundColor: '#F8FAFF',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#CBD5E1',
-    borderRadius: 10,
+    borderColor: '#D7E0ED',
+    borderRadius: 12,
+  },
+  departmentDropdownSelected: {
+    borderColor: '#A5B4FC',
+    backgroundColor: '#F8F9FF',
   },
   departmentDropdownOpen: {
     borderColor: '#635BFF',
@@ -655,10 +677,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   departmentLabel: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: '700',
-    color: '#818CF8',
-    marginBottom: 3,
+    color: '#635BFF',
+    marginBottom: 4,
   },
   departmentValue: {
     fontSize: 14,
@@ -671,16 +693,17 @@ const styles = StyleSheet.create({
   },
   departmentChevron: {
     paddingLeft: 12,
-    fontSize: 20,
+    fontSize: 22,
     color: '#635BFF',
   },
   departmentOptions: {
-    marginTop: 8,
+    marginTop: 10,
     borderTopWidth: 1,
     borderTopColor: '#EEF2F7',
+    paddingTop: 4,
   },
   departmentOption: {
-    minHeight: 44,
+    minHeight: 48,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -689,7 +712,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#E2E8F0',
   },
   departmentOptionSelected: {
-    backgroundColor: '#F0F7FF',
+    backgroundColor: '#F3F2FF',
   },
   departmentOptionText: {
     flex: 1,
@@ -698,7 +721,7 @@ const styles = StyleSheet.create({
     color: '#334155',
   },
   departmentOptionTextSelected: {
-    color: '#4F46E5',
+    color: '#5148D8',
   },
   departmentDoctorCount: {
     marginLeft: 8,
@@ -706,16 +729,17 @@ const styles = StyleSheet.create({
     color: '#64748B',
   },
   departmentHint: {
-    marginTop: 10,
+    marginTop: 12,
+    marginHorizontal: 2,
     fontSize: 11,
-    color: '#64748B',
+    color: '#66758C',
   },
   departmentEmptyCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#DBEAFE',
-    padding: 16,
+    borderColor: '#E0E8F4',
+    padding: 18,
   },
   departmentEmptyText: {
     fontSize: 13,
@@ -724,53 +748,61 @@ const styles = StyleSheet.create({
   },
   dateStrip: {
     flexDirection: 'row',
-    marginBottom: 16,
+    marginBottom: 18,
   },
   dateChip: {
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 10,
+    minHeight: 62,
+    paddingVertical: 11,
+    paddingHorizontal: 15,
+    borderRadius: 12,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#CBD5E1',
-    marginRight: 8,
+    borderColor: '#D7E0ED',
+    marginRight: 9,
     alignItems: 'center',
-    minWidth: 72,
+    justifyContent: 'center',
+    minWidth: 76,
+    shadowColor: '#1E3A8A',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
   },
   dateChipSelected: {
-    backgroundColor: '#208AEF',
-    borderColor: '#208AEF',
+    backgroundColor: '#635BFF',
+    borderColor: '#635BFF',
   },
   dayText: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#64748B',
+    color: '#66758C',
   },
   dateLabel: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#1E293B',
+    color: '#17243A',
     marginTop: 2,
   },
   dateTextSelected: {
     color: '#FFFFFF',
   },
   inputGroup: {
-    marginBottom: 14,
+    marginBottom: 16,
   },
   inputLabel: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
     color: '#334155',
-    marginBottom: 6,
+    marginBottom: 7,
   },
   textInput: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#CBD5E1',
-    borderRadius: 8,
+    borderColor: '#D7E0ED',
+    borderRadius: 11,
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 12,
+    minHeight: 48,
     fontSize: 14,
     color: '#0F172A',
   },
@@ -789,54 +821,60 @@ const styles = StyleSheet.create({
   footer: {
     flexDirection: 'row',
     gap: 10,
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
+    borderTopColor: '#DCE8F8',
   },
   primaryButton: {
     flex: 1,
-    backgroundColor: '#208AEF',
-    paddingVertical: 14,
-    borderRadius: 10,
+    minHeight: 50,
+    backgroundColor: '#635BFF',
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
   primaryButtonText: {
     color: '#FFFFFF',
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
+    textAlign: 'center',
   },
   secondaryButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderRadius: 10,
+    minHeight: 50,
+    paddingHorizontal: 22,
+    paddingVertical: 12,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#CBD5E1',
+    borderColor: '#D7E0ED',
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
   },
   secondaryButtonText: {
     color: '#475569',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
   },
   buttonDisabled: {
-    backgroundColor: '#94A3B8',
-    opacity: 0.6,
+    backgroundColor: '#B8C3D1',
+    opacity: 1,
   },
   successContainer: {
     flex: 1,
-    padding: 24,
+    padding: 20,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: '#EDF4FF',
   },
   successBadge: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: '#22C55E',
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    backgroundColor: '#635BFF',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
@@ -847,7 +885,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   successTitle: {
-    fontSize: 22,
+    fontSize: 21,
     fontWeight: '700',
     color: '#0F172A',
     marginBottom: 6,
@@ -859,10 +897,12 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   refContainer: {
-    backgroundColor: '#F1F5F9',
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#DCE8F8',
     alignItems: 'center',
     marginBottom: 16,
     width: '100%',
@@ -876,18 +916,23 @@ const styles = StyleSheet.create({
   refValue: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#208AEF',
+    color: '#5148D8',
     marginTop: 2,
   },
   simpleDetailsCard: {
-    backgroundColor: '#F0F7FF',
-    borderColor: '#BAE6FD',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#DCE8F8',
     borderWidth: 1,
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 16,
-    marginBottom: 24,
+    marginBottom: 22,
     width: '100%',
     gap: 8,
+    shadowColor: '#1E3A8A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 5,
+    elevation: 1,
   },
   simpleDetailRow: {
     flexDirection: 'row',
@@ -905,16 +950,17 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   confirmActionButton: {
-    backgroundColor: '#208AEF',
+    minHeight: 48,
+    backgroundColor: '#635BFF',
     paddingVertical: 12,
     paddingHorizontal: 28,
-    borderRadius: 20,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
   confirmActionButtonText: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
   },
 });
