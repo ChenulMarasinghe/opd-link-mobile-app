@@ -3,8 +3,11 @@ import {
   query,
   where,
   onSnapshot,
+  addDoc,
+  getDocs,
   updateDoc,
   doc,
+  serverTimestamp,
   Timestamp,
   FieldValue,
 } from 'firebase/firestore';
@@ -20,7 +23,17 @@ export interface PatientNotification {
   type: NotificationType;
   isRead: boolean;
   badgeText?: string;
+  appointmentId?: string;
   createdAt: Timestamp | FieldValue | Date | any;
+}
+
+export interface CreateNotificationInput {
+  patientId?: string;
+  title: string;
+  message: string;
+  type: NotificationType;
+  badgeText?: string;
+  appointmentId?: string;
 }
 
 /**
@@ -95,6 +108,49 @@ export function subscribeNotifications(
 }
 
 /**
+ * CREATE Operation: Creates a notification document in Firestore.
+ * Prevents duplicate notifications if an appointmentId is provided.
+ */
+export async function createNotification(
+  input: CreateNotificationInput
+): Promise<string> {
+  try {
+    const notificationsRef = collection(db, 'notifications');
+    const patientId = input.patientId || 'patient_demo';
+
+    // Duplicate prevention: if appointmentId is provided, check if notification already exists
+    if (input.appointmentId) {
+      const checkQuery = query(
+        notificationsRef,
+        where('patientId', '==', patientId),
+        where('appointmentId', '==', input.appointmentId)
+      );
+      const checkSnapshot = await getDocs(checkQuery);
+      if (!checkSnapshot.empty) {
+        return checkSnapshot.docs[0].id;
+      }
+    }
+
+    const newNotification = {
+      patientId,
+      title: input.title,
+      message: input.message,
+      type: input.type,
+      isRead: false,
+      ...(input.badgeText ? { badgeText: input.badgeText } : {}),
+      ...(input.appointmentId ? { appointmentId: input.appointmentId } : {}),
+      createdAt: serverTimestamp(),
+    };
+
+    const docRef = await addDoc(notificationsRef, newNotification);
+    return docRef.id;
+  } catch (error) {
+    console.error('Error creating notification:', error);
+    throw new Error('Failed to create notification.');
+  }
+}
+
+/**
  * UPDATE Operation: Updates notification isRead state to true in Firestore.
  */
 export async function markNotificationAsRead(notificationId: string): Promise<void> {
@@ -106,3 +162,4 @@ export async function markNotificationAsRead(notificationId: string): Promise<vo
     throw new Error('Failed to update notification status.');
   }
 }
+

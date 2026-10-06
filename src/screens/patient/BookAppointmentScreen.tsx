@@ -67,7 +67,13 @@ function getUpcomingDates(): { fullDate: string; label: string; dayName: string 
   return dates;
 }
 
-export default function BookAppointmentScreen() {
+interface BookAppointmentScreenProps {
+  onViewNotifications?: () => void;
+}
+
+export default function BookAppointmentScreen({
+  onViewNotifications,
+}: BookAppointmentScreenProps = {}) {
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(1);
 
   // Form State
@@ -223,6 +229,15 @@ export default function BookAppointmentScreen() {
           <Pressable style={styles.confirmActionButton} onPress={resetForm}>
             <Text style={styles.confirmActionButtonText}>Book Another Appointment</Text>
           </Pressable>
+
+          {onViewNotifications && (
+            <Pressable
+              style={[styles.confirmActionButton, { backgroundColor: '#6366F1', marginTop: 10 }]}
+              onPress={onViewNotifications}
+            >
+              <Text style={styles.confirmActionButtonText}>View Notifications 🔔</Text>
+            </Pressable>
+          )}
         </View>
       </SafeAreaView>
     );

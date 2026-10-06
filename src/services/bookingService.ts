@@ -11,6 +11,8 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 import { db } from './firebase';
+import { createNotification } from './notificationService';
+
 
 export interface Doctor {
   id: string;
@@ -138,6 +140,20 @@ export async function createAppointment(
     };
 
     const docRef = await addDoc(appointmentsRef, newAppointment);
+
+    // 3. Automatically create "Appointment Confirmed" notification for patient
+    try {
+      await createNotification({
+        patientId: newAppointment.patientId,
+        title: 'Appointment Confirmed',
+        message: `Your appointment with ${input.doctorName} is scheduled for ${input.date} at ${input.timeSlot} in OPD Room ${input.roomNumber}.`,
+        type: 'confirmation',
+        appointmentId: docRef.id,
+      });
+    } catch (notifError) {
+      console.error('Failed to create confirmation notification:', notifError);
+    }
+
     return docRef.id;
   } catch (error: any) {
     console.error('Error creating appointment:', error);
