@@ -1,24 +1,24 @@
-import React, { useState, useEffect } from 'react';
-import {
-  StyleSheet,
-  Text,
-  View,
-  ScrollView,
-  Pressable,
-  TextInput,
-  ActivityIndicator,
-  Alert,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import {
-  Doctor,
-  fetchDoctors,
-  fetchBookedSlots,
-  createAppointment,
-} from '@/services/bookingService';
+import { BookingSummaryCard } from '@/components/patient/BookingSummaryCard';
 import { DoctorCard } from '@/components/patient/DoctorCard';
 import { TimeSlotPicker } from '@/components/patient/TimeSlotPicker';
-import { BookingSummaryCard } from '@/components/patient/BookingSummaryCard';
+import {
+    createAppointment,
+    Doctor,
+    fetchBookedSlots,
+    fetchDoctors,
+} from '@/services/bookingService';
+import React, { useEffect, useState } from 'react';
+import {
+    ActivityIndicator,
+    Alert,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 // Fallback seed doctors for initial demonstration if Firestore is empty
 const MOCK_DOCTORS: Doctor[] = [
@@ -48,6 +48,10 @@ const MOCK_DOCTORS: Doctor[] = [
   },
 ];
 
+function getDoctorDepartment(specialty: unknown): string {
+  return typeof specialty === 'string' ? specialty.trim() : '';
+}
+
 // Helper to generate upcoming 7 dates starting from today
 function getUpcomingDates(): { fullDate: string; label: string; dayName: string }[] {
   const dates = [];
@@ -74,12 +78,21 @@ interface BookAppointmentScreenProps {
 export default function BookAppointmentScreen({
   onViewNotifications,
 }: BookAppointmentScreenProps = {}) {
-  const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4>(1);
+  const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4 | 5>(1);
 
   // Form State
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [loadingDoctors, setLoadingDoctors] = useState<boolean>(true);
+  const [selectedDepartment, setSelectedDepartment] = useState<string | null>(null);
+  const [departmentExpanded, setDepartmentExpanded] = useState<boolean>(false);
   const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
+
+  const departments = Array.from(
+    new Set(doctors.map((doctor) => getDoctorDepartment(doctor.specialty)).filter(Boolean))
+  ).sort((first, second) => first.localeCompare(second));
+  const filteredDoctors = doctors.filter(
+    (doctor) => getDoctorDepartment(doctor.specialty) === selectedDepartment
+  );
 
   const availableDates = getUpcomingDates();
   const [selectedDate, setSelectedDate] = useState<string>(availableDates[0].fullDate);
@@ -167,7 +180,7 @@ export default function BookAppointmentScreen({
       });
 
       setCreatedAppointmentId(appointmentId);
-      setCurrentStep(4); // Move to Success Screen
+      setCurrentStep(5); // Move to Success Screen
     } catch (err: any) {
       const msg = err?.message || 'Failed to create appointment. Please try again.';
       setErrorMessage(msg);
@@ -179,7 +192,10 @@ export default function BookAppointmentScreen({
 
   const resetForm = () => {
     setCurrentStep(1);
+    setSelectedDepartment(null);
+    setDepartmentExpanded(false);
     setSelectedDoctor(null);
+    setBookedSlots([]);
     setSelectedSlot(null);
     setPatientName('');
     setPatientPhone('');
@@ -188,7 +204,7 @@ export default function BookAppointmentScreen({
   };
 
   // Render Confirmation Ticket (Step 4)
-  if (currentStep === 4) {
+  if (currentStep === 5) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.successContainer}>
@@ -253,37 +269,109 @@ export default function BookAppointmentScreen({
 
       {/* Step Indicator */}
       <View style={styles.stepIndicatorContainer}>
-        <View style={[styles.stepItem, currentStep >= 1 && styles.stepItemActive]}>
-          <Text style={[styles.stepNumber, currentStep >= 1 && styles.stepNumberActive]}>1</Text>
-          <Text style={[styles.stepLabel, currentStep >= 1 && styles.stepLabelActive]}>Doctor</Text>
-        </View>
-
-        <View style={styles.stepConnector} />
-
-        <View style={[styles.stepItem, currentStep >= 2 && styles.stepItemActive]}>
-          <Text style={[styles.stepNumber, currentStep >= 2 && styles.stepNumberActive]}>2</Text>
-          <Text style={[styles.stepLabel, currentStep >= 2 && styles.stepLabelActive]}>Date & Slot</Text>
-        </View>
-
-        <View style={styles.stepConnector} />
-
-        <View style={[styles.stepItem, currentStep >= 3 && styles.stepItemActive]}>
-          <Text style={[styles.stepNumber, currentStep >= 3 && styles.stepNumberActive]}>3</Text>
-          <Text style={[styles.stepLabel, currentStep >= 3 && styles.stepLabelActive]}>Confirm</Text>
-        </View>
+        {['Department', 'Doctor', 'Date & Slot', 'Confirm'].map((label, index) => (
+          <React.Fragment key={label}>
+            <View style={styles.stepItem}>
+              <Text style={[styles.stepNumber, currentStep >= index + 1 && styles.stepNumberActive]}>
+                {index + 1}
+              </Text>
+              <Text style={[styles.stepLabel, currentStep >= index + 1 && styles.stepLabelActive]}>
+                {label}
+              </Text>
+            </View>
+            {index < 3 && <View style={styles.stepConnector} />}
+          </React.Fragment>
+        ))}
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* STEP 1: SELECT DOCTOR */}
+        {/* STEP 1: SELECT DEPARTMENT */}
         {currentStep === 1 && (
           <View>
-            <Text style={styles.stepHeader}>Select a Doctor</Text>
-            <Text style={styles.stepSubheader}>Choose an OPD specialist for your visit</Text>
+            <Text style={styles.stepHeader}>Select Department</Text>
+            <Text style={styles.stepSubheader}>Choose a department to see its doctors</Text>
 
-            {loadingDoctors ? (
+            {loadingDoctors && (
               <ActivityIndicator size="large" color="#208AEF" style={{ marginVertical: 30 }} />
+            )}
+            {!loadingDoctors && departments.length === 0 && (
+              <View style={styles.departmentEmptyCard}>
+                <Text style={styles.departmentEmptyText}>No departments are available right now.</Text>
+              </View>
+            )}
+            {!loadingDoctors && departments.length > 0 && (
+              <View style={styles.departmentCard}>
+                <Pressable
+                  style={[styles.departmentDropdown, departmentExpanded && styles.departmentDropdownOpen]}
+                  onPress={() => setDepartmentExpanded((expanded) => !expanded)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Choose a department"
+                  accessibilityState={{ expanded: departmentExpanded }}
+                >
+                  <View style={styles.departmentDropdownText}>
+                    <Text style={styles.departmentLabel}>DEPARTMENT</Text>
+                    <Text style={selectedDepartment ? styles.departmentValue : styles.departmentPlaceholder}>
+                      {selectedDepartment || 'Choose a department'}
+                    </Text>
+                  </View>
+                  <Text style={styles.departmentChevron}>{departmentExpanded ? '⌃' : '⌄'}</Text>
+                </Pressable>
+
+                {departmentExpanded && (
+                  <View style={styles.departmentOptions}>
+                    {departments.map((department) => (
+                      <Pressable
+                        key={department}
+                        style={[
+                          styles.departmentOption,
+                          selectedDepartment === department && styles.departmentOptionSelected,
+                        ]}
+                        onPress={() => {
+                          setSelectedDepartment(department);
+                          setDepartmentExpanded(false);
+                          setSelectedDoctor(null);
+                          setBookedSlots([]);
+                          setSelectedSlot(null);
+                        }}
+                      >
+                        <Text
+                          style={[
+                            styles.departmentOptionText,
+                            selectedDepartment === department && styles.departmentOptionTextSelected,
+                          ]}
+                        >
+                          {department}
+                        </Text>
+                        <Text style={styles.departmentDoctorCount}>
+                          {doctors.filter((doctor) => doctor.specialty === department).length} doctors
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                )}
+
+                {selectedDepartment && (
+                  <Text style={styles.departmentHint}>
+                    {filteredDoctors.length} {filteredDoctors.length === 1 ? 'doctor' : 'doctors'} available
+                  </Text>
+                )}
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* STEP 2: SELECT DOCTOR */}
+        {currentStep === 2 && selectedDepartment && (
+          <View>
+            <Text style={styles.stepHeader}>Select a Doctor</Text>
+            <Text style={styles.stepSubheader}>Choose an OPD specialist in {selectedDepartment}</Text>
+
+            {filteredDoctors.length === 0 ? (
+              <View style={styles.departmentEmptyCard}>
+                <Text style={styles.departmentEmptyText}>No doctors are listed for this department.</Text>
+              </View>
             ) : (
-              doctors.map((doctor) => (
+              filteredDoctors.map((doctor) => (
                 <DoctorCard
                   key={doctor.id}
                   doctor={doctor}
@@ -295,8 +383,8 @@ export default function BookAppointmentScreen({
           </View>
         )}
 
-        {/* STEP 2: SELECT DATE & TIME SLOT */}
-        {currentStep === 2 && selectedDoctor && (
+        {/* STEP 3: SELECT DATE & TIME SLOT */}
+        {currentStep === 3 && selectedDoctor && (
           <View>
             <Text style={styles.stepHeader}>Select Date & Time</Text>
             <Text style={styles.stepSubheader}>
@@ -341,8 +429,8 @@ export default function BookAppointmentScreen({
           </View>
         )}
 
-        {/* STEP 3: REVIEW & CONFIRM */}
-        {currentStep === 3 && selectedDoctor && selectedSlot && (
+        {/* STEP 4: REVIEW & CONFIRM */}
+        {currentStep === 4 && selectedDoctor && selectedSlot && (
           <View>
             <Text style={styles.stepHeader}>Review & Confirm</Text>
             <Text style={styles.stepSubheader}>Please verify your details before booking</Text>
@@ -399,25 +487,35 @@ export default function BookAppointmentScreen({
 
         {currentStep === 1 && (
           <Pressable
-            style={[styles.primaryButton, !selectedDoctor && styles.buttonDisabled]}
-            disabled={!selectedDoctor}
+            style={[styles.primaryButton, !selectedDepartment && styles.buttonDisabled]}
+            disabled={!selectedDepartment}
             onPress={() => setCurrentStep(2)}
           >
-            <Text style={styles.primaryButtonText}>Next: Select Date & Time</Text>
+            <Text style={styles.primaryButtonText}>Next: Select Doctor</Text>
           </Pressable>
         )}
 
         {currentStep === 2 && (
           <Pressable
+            style={[styles.primaryButton, !selectedDoctor && styles.buttonDisabled]}
+            disabled={!selectedDoctor}
+            onPress={() => setCurrentStep(3)}
+          >
+            <Text style={styles.primaryButtonText}>Next: Select Date & Time</Text>
+          </Pressable>
+        )}
+
+        {currentStep === 3 && (
+          <Pressable
             style={[styles.primaryButton, !selectedSlot && styles.buttonDisabled]}
             disabled={!selectedSlot}
-            onPress={() => setCurrentStep(3)}
+            onPress={() => setCurrentStep(4)}
           >
             <Text style={styles.primaryButtonText}>Next: Review Details</Text>
           </Pressable>
         )}
 
-        {currentStep === 3 && (
+        {currentStep === 4 && (
           <Pressable
             style={[styles.primaryButton, submitting && styles.buttonDisabled]}
             disabled={submitting}
@@ -461,46 +559,49 @@ const styles = StyleSheet.create({
   stepIndicatorContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 14,
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#F1F5F9',
   },
   stepItem: {
-    flexDirection: 'row',
+    flex: 1,
+    flexDirection: 'column',
     alignItems: 'center',
   },
   stepItemActive: {},
   stepNumber: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     backgroundColor: '#E2E8F0',
     color: '#64748B',
     textAlign: 'center',
-    lineHeight: 24,
-    fontSize: 12,
+    lineHeight: 22,
+    fontSize: 11,
     fontWeight: '700',
-    marginRight: 6,
   },
   stepNumberActive: {
     backgroundColor: '#208AEF',
     color: '#FFFFFF',
   },
   stepLabel: {
-    fontSize: 12,
+    maxWidth: 58,
+    marginTop: 3,
+    fontSize: 9,
     fontWeight: '600',
     color: '#94A3B8',
+    textAlign: 'center',
   },
   stepLabelActive: {
     color: '#0F172A',
   },
   stepConnector: {
-    width: 24,
+    width: 14,
     height: 2,
     backgroundColor: '#E2E8F0',
-    marginHorizontal: 8,
   },
   scrollContent: {
     padding: 16,
@@ -522,6 +623,104 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#1E293B',
     marginBottom: 8,
+  },
+  departmentCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
+    padding: 12,
+    shadowColor: '#64748B',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  departmentDropdown: {
+    minHeight: 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    backgroundColor: '#F8FAFF',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: 10,
+  },
+  departmentDropdownOpen: {
+    borderColor: '#635BFF',
+  },
+  departmentDropdownText: {
+    flex: 1,
+  },
+  departmentLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#818CF8',
+    marginBottom: 3,
+  },
+  departmentValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1E293B',
+  },
+  departmentPlaceholder: {
+    fontSize: 14,
+    color: '#64748B',
+  },
+  departmentChevron: {
+    paddingLeft: 12,
+    fontSize: 20,
+    color: '#635BFF',
+  },
+  departmentOptions: {
+    marginTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#EEF2F7',
+  },
+  departmentOption: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#E2E8F0',
+  },
+  departmentOptionSelected: {
+    backgroundColor: '#F0F7FF',
+  },
+  departmentOptionText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#334155',
+  },
+  departmentOptionTextSelected: {
+    color: '#4F46E5',
+  },
+  departmentDoctorCount: {
+    marginLeft: 8,
+    fontSize: 11,
+    color: '#64748B',
+  },
+  departmentHint: {
+    marginTop: 10,
+    fontSize: 11,
+    color: '#64748B',
+  },
+  departmentEmptyCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
+    padding: 16,
+  },
+  departmentEmptyText: {
+    fontSize: 13,
+    color: '#64748B',
+    textAlign: 'center',
   },
   dateStrip: {
     flexDirection: 'row',

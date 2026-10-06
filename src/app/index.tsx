@@ -3,69 +3,51 @@ import ClinicStatusScreen from '@/screens/patient/ClinicStatusScreen';
 import NotificationsScreen from '@/screens/patient/NotificationsScreen';
 import ProfileSettingsScreen from '@/screens/patient/ProfileSettingsScreen';
 import { useState } from 'react';
+import { SymbolView } from 'expo-symbols';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
+const patientTabs = [
+  {
+    key: 'booking',
+    label: 'Book\nAppointment',
+    accessibilityLabel: 'Book Appointment',
+    icon: { ios: 'calendar', android: 'calendar_month', web: 'calendar_month' },
+  },
+  {
+    key: 'notifications',
+    label: 'Notifications',
+    accessibilityLabel: 'Notifications',
+    icon: { ios: 'bell', android: 'notifications', web: 'notifications' },
+  },
+  {
+    key: 'clinic',
+    label: 'Clinic Status',
+    accessibilityLabel: 'Clinic Status',
+    icon: { ios: 'building.2', android: 'domain', web: 'domain' },
+  },
+  {
+    key: 'profile',
+    label: 'Profile',
+    accessibilityLabel: 'Profile',
+    icon: { ios: 'person.crop.circle', android: 'account_circle', web: 'account_circle' },
+  },
+] as const;
 
 export default function HomeScreen() {
   const [activeScreen, setActiveScreen] = useState<'booking' | 'notifications' | 'clinic' | 'profile'>('booking');
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Top Test Navigation Switcher */}
-      <View style={styles.navBar}>
-        <Pressable
-          style={[styles.navItem, activeScreen === 'booking' && styles.navItemActive]}
-          onPress={() => setActiveScreen('booking')}
-        >
-          <Text style={[styles.navText, activeScreen === 'booking' && styles.navTextActive]}>
-            📅 Book Appointment
-          </Text>
-        </Pressable>
-
-        <Pressable
-          style={[styles.navItem, activeScreen === 'notifications' && styles.navItemActive]}
-          onPress={() => setActiveScreen('notifications')}
-        >
-          <Text style={[styles.navText, activeScreen === 'notifications' && styles.navTextActive]}>
-            🔔 Notifications
-          </Text>
-        </Pressable>
-
-        <Pressable
-          style={[styles.navItem, activeScreen === 'clinic' && styles.navItemActive]}
-          onPress={() => setActiveScreen('clinic')}
-        >
-          <Text style={[styles.navText, activeScreen === 'clinic' && styles.navTextActive]}>
-            🏥 Clinic Status
-          </Text>
-        </Pressable>
-
-        <Pressable
-          style={[styles.navItem, activeScreen === 'profile' && styles.navItemActive]}
-          onPress={() => setActiveScreen('profile')}
-        >
-          <Text style={[styles.navText, activeScreen === 'profile' && styles.navTextActive]}>
-            👤 Profile
-          </Text>
-        </Pressable>
-      </View>
-
-      {/* Screen Body */}
+    <View style={styles.container}>
       <View style={styles.body}>
         {activeScreen === 'booking' && (
-          <BookAppointmentScreen
-            onViewNotifications={() => setActiveScreen('notifications')}
-          />
+          <BookAppointmentScreen onViewNotifications={() => setActiveScreen('notifications')} />
         )}
         {activeScreen === 'notifications' && (
-          <NotificationsScreen
-            onBack={() => setActiveScreen('booking')}
-          />
+          <NotificationsScreen onBack={() => setActiveScreen('booking')} />
         )}
         {activeScreen === 'clinic' && (
-          <ClinicStatusScreen
-            onBack={() => setActiveScreen('booking')}
-          />
+          <ClinicStatusScreen onBack={() => setActiveScreen('booking')} />
         )}
         {activeScreen === 'profile' && (
           <ProfileSettingsScreen
@@ -74,8 +56,37 @@ export default function HomeScreen() {
           />
         )}
       </View>
-    </SafeAreaView>
-  );;
+
+      <SafeAreaView edges={['bottom']} style={styles.bottomNavSafeArea}>
+        <View style={styles.bottomNav}>
+          {patientTabs.map((tab) => {
+            const selected = activeScreen === tab.key;
+            return (
+              <Pressable
+                key={tab.key}
+                style={styles.tabButton}
+                onPress={() => setActiveScreen(tab.key)}
+                accessibilityRole="tab"
+                accessibilityLabel={tab.accessibilityLabel}
+                accessibilityState={{ selected }}
+              >
+                <View style={[styles.tabIconContainer, selected && styles.tabIconContainerSelected]}>
+                  <SymbolView
+                    name={tab.icon}
+                    size={20}
+                    tintColor={selected ? '#635BFF' : '#64748B'}
+                  />
+                </View>
+                <Text style={[styles.tabLabel, selected && styles.tabLabelSelected]} numberOfLines={2}>
+                  {tab.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      </SafeAreaView>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
@@ -83,31 +94,45 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F8FAFC',
   },
-  navBar: {
+  bottomNavSafeArea: {
+    backgroundColor: '#FFFFFF',
+  },
+  bottomNav: {
     flexDirection: 'row',
     backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-    paddingHorizontal: 8,
-    paddingBottom: 6,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+    paddingHorizontal: 4,
     paddingTop: 6,
   },
-  navItem: {
+  tabButton: {
     flex: 1,
-    paddingVertical: 8,
+    minHeight: 56,
+    paddingHorizontal: 2,
+    paddingBottom: 4,
     alignItems: 'center',
-    borderRadius: 8,
+    justifyContent: 'center',
+    gap: 2,
   },
-  navItemActive: {
+  tabIconContainer: {
+    width: 34,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabIconContainerSelected: {
     backgroundColor: '#EEF2FF',
   },
-  navText: {
-    fontSize: 13,
+  tabLabel: {
+    fontSize: 9,
     fontWeight: '600',
     color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 11,
   },
-  navTextActive: {
-    color: '#208AEF',
+  tabLabelSelected: {
+    color: '#635BFF',
     fontWeight: '700',
   },
   body: {

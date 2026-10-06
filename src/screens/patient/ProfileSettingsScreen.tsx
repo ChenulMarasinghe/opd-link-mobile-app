@@ -1,23 +1,23 @@
+import {
+    createPatientProfile,
+    getPatientProfile,
+    PatientLanguage,
+    PatientProfile,
+    PatientProfileUpdates,
+    updatePatientProfile,
+} from '@/services/profileService';
 import { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  View,
+    ActivityIndicator,
+    Pressable,
+    ScrollView,
+    StyleSheet,
+    Switch,
+    Text,
+    TextInput,
+    View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import {
-  createPatientProfile,
-  getPatientProfile,
-  PatientLanguage,
-  PatientProfile,
-  PatientProfileUpdates,
-  updatePatientProfile,
-} from '@/services/profileService';
 
 const PATIENT_ID = 'patient_demo';
 
