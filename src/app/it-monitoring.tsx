@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+﻿import { router } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -104,7 +104,10 @@ export default function ITMonitoringScreen() {
             key={item.label}
             accessibilityRole="tab"
             accessibilityState={{ selected: item.label === 'Monitoring' }}
-            onPress={() => item.label === 'Dashboard' && router.replace('/it-dashboard')}
+            onPress={() => {
+              if (item.label === 'Dashboard') router.replace('/it-dashboard');
+              if (item.label === 'Error Logs') router.replace('/error-logs');
+            }}
             style={styles.navItem}>
             <SymbolView name={{ ios: item.ios, android: item.android, web: item.web }} size={16} tintColor={item.label === 'Monitoring' ? '#10C995' : '#A5B3C7'} />
             <ThemedText style={[styles.navLabel, { color: item.label === 'Monitoring' ? '#10C995' : '#A5B3C7' }]}>{item.label}</ThemedText>

@@ -34,6 +34,10 @@ export default function ITDashboardScreen() {
   const handleCardPress = (title: string) => {
     if (title === 'IT Monitoring') {
       router.push('/it-monitoring');
+    } else if (title === 'Error Logs') {
+      router.push('/error-logs');
+    } else if (title === 'Maintenance & Backup') {
+      router.push('/it-monitoring');
     }
   };
 
@@ -81,7 +85,10 @@ export default function ITDashboardScreen() {
             key={item.label}
             accessibilityRole="tab"
             accessibilityState={{ selected: item.active }}
-            onPress={() => item.label === 'Monitoring' && router.push('/it-monitoring')}
+            onPress={() => {
+              if (item.label === 'Monitoring') router.push('/it-monitoring');
+              if (item.label === 'Error Logs') router.push('/error-logs');
+            }}
             style={styles.navItem}>
             <SymbolView name={{ ios: item.ios, android: item.android, web: item.web }} size={17} tintColor={item.active ? '#10C995' : '#A5B3C7'} />
             <ThemedText style={[styles.navLabel, { color: item.active ? '#10C995' : '#A5B3C7' }]}>{item.label}</ThemedText>
