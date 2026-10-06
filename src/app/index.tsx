@@ -1,12 +1,13 @@
 import BookAppointmentScreen from '@/screens/patient/BookAppointmentScreen';
 import ClinicStatusScreen from '@/screens/patient/ClinicStatusScreen';
 import NotificationsScreen from '@/screens/patient/NotificationsScreen';
+import ProfileSettingsScreen from '@/screens/patient/ProfileSettingsScreen';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function HomeScreen() {
-  const [activeScreen, setActiveScreen] = useState<'booking' | 'notifications' | 'clinic'>('booking');
+  const [activeScreen, setActiveScreen] = useState<'booking' | 'notifications' | 'clinic' | 'profile'>('booking');
 
   return (
     <SafeAreaView style={styles.container}>
@@ -38,21 +39,38 @@ export default function HomeScreen() {
             🏥 Clinic Status
           </Text>
         </Pressable>
+
+        <Pressable
+          style={[styles.navItem, activeScreen === 'profile' && styles.navItemActive]}
+          onPress={() => setActiveScreen('profile')}
+        >
+          <Text style={[styles.navText, activeScreen === 'profile' && styles.navTextActive]}>
+            👤 Profile
+          </Text>
+        </Pressable>
       </View>
 
       {/* Screen Body */}
       <View style={styles.body}>
-        {activeScreen === 'booking' ? (
+        {activeScreen === 'booking' && (
           <BookAppointmentScreen
             onViewNotifications={() => setActiveScreen('notifications')}
           />
-        ) : activeScreen === 'notifications' ? (
+        )}
+        {activeScreen === 'notifications' && (
           <NotificationsScreen
             onBack={() => setActiveScreen('booking')}
           />
-        ) : (
+        )}
+        {activeScreen === 'clinic' && (
           <ClinicStatusScreen
             onBack={() => setActiveScreen('booking')}
+          />
+        )}
+        {activeScreen === 'profile' && (
+          <ProfileSettingsScreen
+            onBack={() => setActiveScreen('booking')}
+            onOpenClinicStatus={() => setActiveScreen('clinic')}
           />
         )}
       </View>
