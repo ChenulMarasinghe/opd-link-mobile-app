@@ -1,13 +1,15 @@
-import React, { useState } from 'react';
-import { StyleSheet, View, Text, Pressable } from 'react-native';
 import BookAppointmentScreen from '@/screens/patient/BookAppointmentScreen';
+import ClinicStatusScreen from '@/screens/patient/ClinicStatusScreen';
 import NotificationsScreen from '@/screens/patient/NotificationsScreen';
+import { useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function HomeScreen() {
-  const [activeScreen, setActiveScreen] = useState<'booking' | 'notifications'>('booking');
+  const [activeScreen, setActiveScreen] = useState<'booking' | 'notifications' | 'clinic'>('booking');
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       {/* Top Test Navigation Switcher */}
       <View style={styles.navBar}>
         <Pressable
@@ -27,6 +29,15 @@ export default function HomeScreen() {
             🔔 Notifications
           </Text>
         </Pressable>
+
+        <Pressable
+          style={[styles.navItem, activeScreen === 'clinic' && styles.navItemActive]}
+          onPress={() => setActiveScreen('clinic')}
+        >
+          <Text style={[styles.navText, activeScreen === 'clinic' && styles.navTextActive]}>
+            🏥 Clinic Status
+          </Text>
+        </Pressable>
       </View>
 
       {/* Screen Body */}
@@ -35,14 +46,18 @@ export default function HomeScreen() {
           <BookAppointmentScreen
             onViewNotifications={() => setActiveScreen('notifications')}
           />
-        ) : (
+        ) : activeScreen === 'notifications' ? (
           <NotificationsScreen
+            onBack={() => setActiveScreen('booking')}
+          />
+        ) : (
+          <ClinicStatusScreen
             onBack={() => setActiveScreen('booking')}
           />
         )}
       </View>
-    </View>
-  );
+    </SafeAreaView>
+  );;
 }
 
 const styles = StyleSheet.create({
@@ -55,9 +70,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E2E8F0',
-    paddingTop: 44, // Safe area top offset for testing
     paddingHorizontal: 8,
     paddingBottom: 6,
+    paddingTop: 6,
   },
   navItem: {
     flex: 1,
