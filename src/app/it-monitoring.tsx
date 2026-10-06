@@ -107,6 +107,7 @@ export default function ITMonitoringScreen() {
             onPress={() => {
               if (item.label === 'Dashboard') router.replace('/it-dashboard');
               if (item.label === 'Error Logs') router.replace('/error-logs');
+              if (item.label === 'Maintenance') router.replace('/maintenance');
             }}
             style={styles.navItem}>
             <SymbolView name={{ ios: item.ios, android: item.android, web: item.web }} size={16} tintColor={item.label === 'Monitoring' ? '#10C995' : '#A5B3C7'} />

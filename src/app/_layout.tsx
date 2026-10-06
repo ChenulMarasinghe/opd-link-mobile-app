@@ -17,6 +17,7 @@ export default function RootLayout() {
         <Stack.Screen name="it-dashboard" options={{ headerShown: false }} />
         <Stack.Screen name="it-monitoring" options={{ headerShown: false }} />
         <Stack.Screen name="error-logs" options={{ headerShown: false }} />
+        <Stack.Screen name="maintenance" options={{ headerShown: false }} />
       </Stack>
     </ThemeProvider>
   );

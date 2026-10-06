@@ -37,7 +37,7 @@ export default function ITDashboardScreen() {
     } else if (title === 'Error Logs') {
       router.push('/error-logs');
     } else if (title === 'Maintenance & Backup') {
-      router.push('/it-monitoring');
+      router.push('/maintenance');
     }
   };
 
@@ -88,6 +88,7 @@ export default function ITDashboardScreen() {
             onPress={() => {
               if (item.label === 'Monitoring') router.push('/it-monitoring');
               if (item.label === 'Error Logs') router.push('/error-logs');
+              if (item.label === 'Maintenance') router.push('/maintenance');
             }}
             style={styles.navItem}>
             <SymbolView name={{ ios: item.ios, android: item.android, web: item.web }} size={17} tintColor={item.active ? '#10C995' : '#A5B3C7'} />
