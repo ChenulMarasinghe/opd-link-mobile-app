@@ -202,17 +202,26 @@ export default function BookAppointmentScreen() {
           )}
 
           {selectedDoctor && selectedSlot && (
-            <BookingSummaryCard
-              doctor={selectedDoctor}
-              date={selectedDate}
-              timeSlot={selectedSlot}
-              patientName={patientName}
-              patientPhone={patientPhone}
-            />
+            <View style={styles.simpleDetailsCard}>
+              <View style={styles.simpleDetailRow}>
+                <Text style={styles.simpleDetailLabel}>Doctor:</Text>
+                <Text style={styles.simpleDetailValue}>{selectedDoctor.name}</Text>
+              </View>
+              <View style={styles.simpleDetailRow}>
+                <Text style={styles.simpleDetailLabel}>Date & Time:</Text>
+                <Text style={styles.simpleDetailValue}>
+                  {selectedDate} • {selectedSlot}
+                </Text>
+              </View>
+              <View style={styles.simpleDetailRow}>
+                <Text style={styles.simpleDetailLabel}>Location:</Text>
+                <Text style={styles.simpleDetailValue}>OPD Room {selectedDoctor.roomNumber}</Text>
+              </View>
+            </View>
           )}
 
-          <Pressable style={styles.primaryButton} onPress={resetForm}>
-            <Text style={styles.primaryButtonText}>Book Another Appointment</Text>
+          <Pressable style={styles.confirmActionButton} onPress={resetForm}>
+            <Text style={styles.confirmActionButtonText}>Book Another Appointment</Text>
           </Pressable>
         </View>
       </SafeAreaView>
@@ -655,5 +664,43 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#208AEF',
     marginTop: 2,
+  },
+  simpleDetailsCard: {
+    backgroundColor: '#F0F7FF',
+    borderColor: '#BAE6FD',
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 24,
+    width: '100%',
+    gap: 8,
+  },
+  simpleDetailRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  simpleDetailLabel: {
+    fontSize: 13,
+    color: '#475569',
+    fontWeight: '500',
+  },
+  simpleDetailValue: {
+    fontSize: 13,
+    color: '#0F172A',
+    fontWeight: '600',
+  },
+  confirmActionButton: {
+    backgroundColor: '#208AEF',
+    paddingVertical: 12,
+    paddingHorizontal: 28,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  confirmActionButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
