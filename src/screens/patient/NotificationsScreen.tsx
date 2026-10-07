@@ -6,12 +6,14 @@ import {
   ScrollView,
   Pressable,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   PatientNotification,
   subscribeNotifications,
   markNotificationAsRead,
+  deleteNotification,
 } from '@/services/notificationService';
 import { NotificationCard } from '@/components/patient/NotificationCard';
 
@@ -55,6 +57,26 @@ export default function NotificationsScreen({
         console.error('Failed to mark notification as read:', err);
       }
     }
+  };
+
+  const handleDeleteNotification = (item: PatientNotification) => {
+    Alert.alert(
+      'Delete Notification',
+      'Are you sure you want to delete this notification?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            deleteNotification(item.id).catch((error) => {
+              console.error('Failed to delete notification:', error);
+              Alert.alert('Unable to delete notification', 'Please try again.');
+            });
+          },
+        },
+      ]
+    );
   };
 
   // Filtered Notifications List
@@ -153,6 +175,7 @@ export default function NotificationsScreen({
               key={item.id}
               notification={item}
               onPress={handleCardPress}
+              onDelete={handleDeleteNotification}
             />
           ))
         )}

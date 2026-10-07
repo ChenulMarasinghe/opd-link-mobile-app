@@ -6,6 +6,7 @@ import {
   addDoc,
   getDocs,
   updateDoc,
+  deleteDoc,
   doc,
   serverTimestamp,
   Timestamp,
@@ -160,6 +161,18 @@ export async function markNotificationAsRead(notificationId: string): Promise<vo
   } catch (error) {
     console.error('Error marking notification as read:', error);
     throw new Error('Failed to update notification status.');
+  }
+}
+
+/**
+ * DELETE Operation: Deletes one notification document by its Firestore ID.
+ */
+export async function deleteNotification(notificationId: string): Promise<void> {
+  try {
+    await deleteDoc(doc(db, 'notifications', notificationId));
+  } catch (error) {
+    console.error('Error deleting notification:', error);
+    throw new Error('Failed to delete notification.');
   }
 }
 

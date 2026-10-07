@@ -8,11 +8,13 @@ import {
 interface NotificationCardProps {
   notification: PatientNotification;
   onPress: (notification: PatientNotification) => void;
+  onDelete: (notification: PatientNotification) => void;
 }
 
 export function NotificationCard({
   notification,
   onPress,
+  onDelete,
 }: NotificationCardProps) {
   const { title, message, type, isRead, badgeText, createdAt } = notification;
   const timeDisplay = formatRelativeTime(createdAt);
@@ -56,44 +58,58 @@ export function NotificationCard({
   const iconConfig = getIconConfig();
 
   return (
-    <Pressable
-      style={[styles.card, !isRead && styles.cardUnread]}
-      onPress={() => onPress(notification)}
-    >
+    <View style={[styles.card, !isRead && styles.cardUnread]}>
       {/* Unread Indicator Dot */}
       {!isRead && <View style={styles.unreadDot} />}
 
-      {/* Icon Circle */}
-      <View style={[styles.iconContainer, { backgroundColor: iconConfig.bg }]}>
-        <Text style={[styles.iconSymbol, { color: iconConfig.color }]}>
-          {iconConfig.symbol}
-        </Text>
-      </View>
-
-      {/* Content Section */}
-      <View style={styles.contentContainer}>
-        {/* Header Row: Title + Time */}
-        <View style={styles.headerRow}>
-          <Text style={styles.title} numberOfLines={1}>
-            {title}
+      <Pressable
+        style={styles.notificationPressable}
+        onPress={() => onPress(notification)}
+        accessibilityRole="button"
+        accessibilityLabel={`Open notification: ${title}`}
+      >
+        {/* Icon Circle */}
+        <View style={[styles.iconContainer, { backgroundColor: iconConfig.bg }]}>
+          <Text style={[styles.iconSymbol, { color: iconConfig.color }]}>
+            {iconConfig.symbol}
           </Text>
-          <Text style={styles.timeText}>{timeDisplay}</Text>
         </View>
 
-        {/* Message / Body with optional Badge Tag */}
-        <View style={styles.bodyRow}>
-          <Text style={styles.messageText}>
-            {message}
-            {badgeText ? ' ' : ''}
-          </Text>
-          {badgeText ? (
-            <View style={styles.badgePill}>
-              <Text style={styles.badgeText}>{badgeText}</Text>
-            </View>
-          ) : null}
+        {/* Content Section */}
+        <View style={styles.contentContainer}>
+          {/* Header Row: Title + Time */}
+          <View style={styles.headerRow}>
+            <Text style={styles.title} numberOfLines={1}>
+              {title}
+            </Text>
+            <Text style={styles.timeText}>{timeDisplay}</Text>
+          </View>
+
+          {/* Message / Body with optional Badge Tag */}
+          <View style={styles.bodyRow}>
+            <Text style={styles.messageText}>
+              {message}
+              {badgeText ? ' ' : ''}
+            </Text>
+            {badgeText ? (
+              <View style={styles.badgePill}>
+                <Text style={styles.badgeText}>{badgeText}</Text>
+              </View>
+            ) : null}
+          </View>
         </View>
-      </View>
-    </Pressable>
+      </Pressable>
+
+      <Pressable
+        style={styles.deleteButton}
+        onPress={() => onDelete(notification)}
+        accessibilityRole="button"
+        accessibilityLabel={`Delete notification: ${title}`}
+        hitSlop={6}
+      >
+        <Text style={styles.deleteText}>Delete</Text>
+      </Pressable>
+    </View>
   );
 }
 
@@ -113,6 +129,12 @@ const styles = StyleSheet.create({
     elevation: 1,
     borderWidth: 1,
     borderColor: '#E0E8F4',
+  },
+  notificationPressable: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
   },
   cardUnread: {
     borderColor: '#C9C6FF',
@@ -140,6 +162,7 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     flex: 1,
+    minWidth: 0,
   },
   headerRow: {
     flexDirection: 'row',
@@ -184,5 +207,21 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: '#5148D8',
+  },
+  deleteButton: {
+    minHeight: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
+    paddingHorizontal: 7,
+    borderRadius: 8,
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  deleteText: {
+    color: '#B91C1C',
+    fontSize: 10,
+    fontWeight: '700',
   },
 });
