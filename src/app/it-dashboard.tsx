@@ -6,6 +6,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { ActivityItem, type ActivityTone } from '@/components/it-dashboard/activity-item';
 import { StatusCard, type StatusCardTone } from '@/components/it-dashboard/status-card';
+import LogoutButton from '@/components/LogoutButton';
 import { ThemedText } from '@/components/themed-text';
 
 const dashboardCards: { title: string; subtitle: string; status: string; tone: StatusCardTone }[] = [
@@ -49,10 +50,7 @@ export default function ITDashboardScreen() {
             <ThemedText style={styles.heading}>IT Dashboard</ThemedText>
             <ThemedText style={styles.welcome}>Welcome back, Admin Support</ThemedText>
           </View>
-          <View style={styles.opdBadge}>
-            <SymbolView name={{ ios: 'waveform.path.ecg', android: 'monitor_heart', web: 'monitor_heart' }} size={12} tintColor="#6875FF" />
-            <ThemedText style={styles.opdText}>OPD</ThemedText>
-          </View>
+          <LogoutButton variant="dashboard" />
         </View>
 
         <View style={styles.operationalCard}>
@@ -106,8 +104,6 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
   heading: { color: '#18233A', fontSize: 21, lineHeight: 26, fontWeight: '800' },
   welcome: { color: '#43536D', fontSize: 10, lineHeight: 14 },
-  opdBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#E8EBFF', borderRadius: 12, paddingHorizontal: 8, paddingVertical: 6 },
-  opdText: { color: '#6875FF', fontSize: 9, fontWeight: '700' },
   operationalCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: 16, padding: 12, marginBottom: 12, shadowColor: '#7FA4C9', shadowOpacity: 0.08, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 2 },
   checkCircle: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#E0FAF3', alignItems: 'center', justifyContent: 'center', marginRight: 11 },
   operationalTitle: { color: '#18233A', fontSize: 12, lineHeight: 16, fontWeight: '700' },

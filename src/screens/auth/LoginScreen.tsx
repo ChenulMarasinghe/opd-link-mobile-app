@@ -7,7 +7,7 @@ import { useAuth } from "../../context/AuthContext";
 import { isValidEmail } from "../../utils/validation";
 
 export default function LoginScreen() {
-  const { user, profile, loading } = useAuth();
+  const { user, profile, loading, refreshAuth } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -25,6 +25,7 @@ export default function LoginScreen() {
     try {
       setBusy(true);
       await loginUser(email, password);
+      await refreshAuth();
       // no router.replace here: the effect above handles it
     } catch {
       Alert.alert("Login failed", "Check your email and password and try again.");

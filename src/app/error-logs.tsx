@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
+import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -71,7 +71,7 @@ function Summary({ label, value, color, background }: { label: string; value: st
   );
 }
 
-function NavItem({ label, icon, onPress, active = false }: { label: string; icon: { ios: string; android: string; web: string }; onPress?: () => void; active?: boolean }) {
+function NavItem({ label, icon, onPress, active = false }: { label: string; icon: NonNullable<SymbolViewProps['name']>; onPress?: () => void; active?: boolean }) {
   return (
     <Pressable accessibilityRole="tab" accessibilityState={{ selected: active }} onPress={onPress} style={styles.navItem}>
       <SymbolView name={icon} size={16} tintColor={active ? '#10C995' : '#A5B3C7'} />
