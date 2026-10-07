@@ -203,7 +203,11 @@ export default function ProfileSettingsScreen({
         </Pressable>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
         {loading ? (
           <ActivityIndicator size="large" color="#635BFF" style={styles.loader} />
         ) : loadError ? (
@@ -228,10 +232,10 @@ export default function ProfileSettingsScreen({
               </View>
               {editing ? (
                 <View style={styles.editActions}>
-                  <Pressable onPress={cancelEditing} disabled={saving}>
+                  <Pressable style={styles.cancelButton} onPress={cancelEditing} disabled={saving}>
                     <Text style={styles.cancelText}>Cancel</Text>
                   </Pressable>
-                  <Pressable onPress={saveProfile} disabled={saving}>
+                  <Pressable style={styles.editProfileButton} onPress={saveProfile} disabled={saving}>
                     {saving ? (
                       <ActivityIndicator size="small" color="#635BFF" />
                     ) : (
@@ -240,8 +244,8 @@ export default function ProfileSettingsScreen({
                   </Pressable>
                 </View>
               ) : (
-                <Pressable onPress={startEditing}>
-                  <Text style={styles.editText}>Edit</Text>
+                <Pressable style={styles.editProfileButton} onPress={startEditing}>
+                  <Text style={styles.editText}>Edit Profile</Text>
                 </Pressable>
               )}
             </View>
@@ -438,7 +442,7 @@ function SupportRow({ label, onPress, last = false }: SupportRowProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#EAF1FF',
+    backgroundColor: '#EDF4FF',
   },
   header: {
     minHeight: 54,
@@ -448,6 +452,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 4,
     paddingBottom: 8,
+    backgroundColor: '#EDF4FF',
   },
   backButton: {
     width: 38,
@@ -456,7 +461,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000000',
+    shadowColor: '#1E3A8A',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 3,
@@ -485,7 +490,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: '#DCE8F8',
     alignItems: 'center',
   },
   langText: {
@@ -495,34 +500,40 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 16,
-    paddingBottom: 20,
+    paddingTop: 4,
+    paddingBottom: 28,
+  },
+  scrollView: {
+    flex: 1,
   },
   loader: {
     marginTop: 48,
   },
   profileCard: {
-    minHeight: 66,
+    minHeight: 76,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 22,
-    marginBottom: 12,
-    shadowColor: '#64748B',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 18,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#E0E8F4',
+    shadowColor: '#1E3A8A',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07,
+    shadowOpacity: 0.05,
     shadowRadius: 5,
-    elevation: 2,
+    elevation: 1,
   },
   avatar: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: '#EEF2FF',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
+    marginRight: 12,
   },
   avatarHead: {
     width: 10,
@@ -543,20 +554,32 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   profileName: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '700',
-    color: '#1E293B',
+    color: '#17243A',
   },
   patientId: {
     marginTop: 2,
-    fontSize: 9,
-    color: '#64748B',
+    fontSize: 10,
+    color: '#66758C',
   },
   editText: {
-    color: '#635BFF',
+    color: '#5148D8',
     fontSize: 11,
     fontWeight: '700',
-    paddingLeft: 8,
+  },
+  editProfileButton: {
+    minHeight: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 11,
+    borderRadius: 11,
+    backgroundColor: '#EEF2FF',
+  },
+  cancelButton: {
+    minHeight: 36,
+    justifyContent: 'center',
+    paddingHorizontal: 7,
   },
   editActions: {
     flexDirection: 'row',
@@ -564,28 +587,35 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   cancelText: {
-    color: '#64748B',
+    color: '#66758C',
     fontSize: 10,
     fontWeight: '600',
   },
   sectionLabel: {
     marginLeft: 6,
-    marginBottom: 5,
-    marginTop: 1,
-    fontSize: 8,
+    marginBottom: 7,
+    marginTop: 2,
+    fontSize: 10,
     fontWeight: '800',
     letterSpacing: 0.5,
-    color: '#64748B',
+    color: '#68778D',
   },
   infoCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    paddingHorizontal: 12,
-    paddingVertical: 3,
-    marginBottom: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E0E8F4',
+    paddingHorizontal: 14,
+    paddingVertical: 5,
+    marginBottom: 14,
+    shadowColor: '#1E3A8A',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
   },
   infoRow: {
-    minHeight: 30,
+    minHeight: 52,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -593,52 +623,65 @@ const styles = StyleSheet.create({
   },
   rowDivider: {
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#EEF2F7',
+    borderBottomColor: '#EAF0F7',
   },
   infoLabel: {
     flex: 1,
-    fontSize: 9,
-    color: '#64748B',
+    fontSize: 11,
+    color: '#66758C',
   },
   infoValue: {
-    flex: 1.2,
-    fontSize: 9,
+    flex: 1.4,
+    fontSize: 11,
     fontWeight: '600',
-    color: '#334155',
+    color: '#25344B',
     textAlign: 'right',
   },
   infoInput: {
-    flex: 1.4,
-    minHeight: 28,
-    fontSize: 9,
-    color: '#334155',
+    flex: 1.5,
+    minHeight: 40,
+    paddingHorizontal: 9,
+    paddingVertical: 7,
+    fontSize: 11,
+    color: '#25344B',
     textAlign: 'right',
-    paddingVertical: 2,
+    backgroundColor: '#F8FAFF',
+    borderWidth: 1,
+    borderColor: '#DCE4F0',
+    borderRadius: 9,
   },
   preferencesCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    paddingHorizontal: 12,
-    paddingVertical: 2,
-    marginBottom: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E0E8F4',
+    paddingHorizontal: 14,
+    paddingVertical: 3,
+    marginBottom: 14,
+    shadowColor: '#1E3A8A',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
   },
   languageRow: {
-    minHeight: 37,
+    minHeight: 48,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#EEF2F7',
+    borderBottomColor: '#EAF0F7',
   },
   preferenceRow: {
-    minHeight: 37,
+    minHeight: 48,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
   preferenceLabel: {
-    fontSize: 9,
-    color: '#475569',
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#52627A',
   },
   languageOptions: {
     flexDirection: 'row',
@@ -646,19 +689,23 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   languageOption: {
-    minWidth: 30,
-    minHeight: 23,
-    paddingHorizontal: 7,
+    minWidth: 42,
+    minHeight: 30,
+    paddingHorizontal: 9,
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 12,
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: '#DCE4F0',
+    backgroundColor: '#FFFFFF',
   },
   languageSelected: {
     backgroundColor: '#635BFF',
+    borderColor: '#635BFF',
   },
   languageText: {
-    fontSize: 9,
-    color: '#64748B',
+    fontSize: 10,
+    color: '#52627A',
   },
   languageTextSelected: {
     fontWeight: '700',
@@ -666,32 +713,45 @@ const styles = StyleSheet.create({
   },
   supportCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 18,
-    paddingHorizontal: 12,
-    paddingVertical: 2,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E0E8F4',
+    paddingHorizontal: 14,
+    paddingVertical: 3,
+    marginBottom: 14,
+    shadowColor: '#1E3A8A',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
   },
   supportRow: {
-    minHeight: 34,
+    minHeight: 46,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
   supportLabel: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: '600',
-    color: '#334155',
+    color: '#25344B',
   },
   supportChevron: {
-    fontSize: 18,
-    color: '#94A3B8',
-    lineHeight: 20,
+    fontSize: 21,
+    color: '#8A97AA',
+    lineHeight: 24,
   },
   logoutContainer: {
+    minHeight: 48,
+    marginTop: 4,
     alignItems: 'center',
-    paddingVertical: 13,
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#DCE8F8',
   },
   logoutText: {
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: '700',
     color: '#EF4444',
   },

@@ -52,6 +52,23 @@ function getDoctorDepartment(specialty: unknown): string {
   return typeof specialty === 'string' ? specialty.trim() : '';
 }
 
+function getPatientNameError(name: string): string | null {
+  const trimmedName = name.trim();
+  if (!trimmedName) return 'Enter your full name.';
+  if (!/^[A-Za-z]+(?:\s+[A-Za-z]+)*$/.test(trimmedName)) {
+    return 'Use letters and spaces only.';
+  }
+  return null;
+}
+
+function getPatientPhoneError(phone: string): string | null {
+  if (!phone) return 'Enter your contact number.';
+  if (!/^07\d{8}$/.test(phone)) {
+    return 'Enter a 10-digit mobile number starting with 07.';
+  }
+  return null;
+}
+
 // Helper to generate upcoming 7 dates starting from today
 function getUpcomingDates(): { fullDate: string; label: string; dayName: string }[] {
   const dates = [];
@@ -103,6 +120,8 @@ export default function BookAppointmentScreen({
 
   const [patientName, setPatientName] = useState<string>('');
   const [patientPhone, setPatientPhone] = useState<string>('');
+  const [patientNameError, setPatientNameError] = useState<string | null>(null);
+  const [patientPhoneError, setPatientPhoneError] = useState<string | null>(null);
 
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [createdAppointmentId, setCreatedAppointmentId] = useState<string | null>(null);
@@ -154,13 +173,13 @@ export default function BookAppointmentScreen({
   const handleConfirmBooking = async () => {
     if (!selectedDoctor || !selectedDate || !selectedSlot) return;
 
-    if (!patientName.trim()) {
-      Alert.alert('Validation Error', 'Please enter your patient name.');
-      return;
-    }
+    const trimmedName = patientName.trim();
+    const nameError = getPatientNameError(patientName);
+    const phoneError = getPatientPhoneError(patientPhone);
+    setPatientNameError(nameError);
+    setPatientPhoneError(phoneError);
 
-    if (!patientPhone.trim()) {
-      Alert.alert('Validation Error', 'Please enter your phone number.');
+    if (nameError || phoneError) {
       return;
     }
 
@@ -175,8 +194,8 @@ export default function BookAppointmentScreen({
         roomNumber: selectedDoctor.roomNumber,
         date: selectedDate,
         timeSlot: selectedSlot,
-        patientName: patientName.trim(),
-        patientPhone: patientPhone.trim(),
+        patientName: trimmedName,
+        patientPhone,
       });
 
       setCreatedAppointmentId(appointmentId);
@@ -199,6 +218,8 @@ export default function BookAppointmentScreen({
     setSelectedSlot(null);
     setPatientName('');
     setPatientPhone('');
+    setPatientNameError(null);
+    setPatientPhoneError(null);
     setCreatedAppointmentId(null);
     setErrorMessage(null);
   };
@@ -456,24 +477,39 @@ export default function BookAppointmentScreen({
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Patient Full Name *</Text>
               <TextInput
-                style={styles.textInput}
+                style={[styles.textInput, patientNameError && styles.textInputInvalid]}
                 placeholder="Enter patient name"
                 placeholderTextColor="#94A3B8"
                 value={patientName}
-                onChangeText={setPatientName}
+                onChangeText={(value) => {
+                  setPatientName(value);
+                  if (patientNameError) {
+                    setPatientNameError(getPatientNameError(value));
+                  }
+                }}
+                autoCapitalize="words"
+                autoCorrect={false}
               />
+              {patientNameError && <Text style={styles.fieldErrorText}>{patientNameError}</Text>}
             </View>
 
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Contact Phone Number *</Text>
               <TextInput
-                style={styles.textInput}
+                style={[styles.textInput, patientPhoneError && styles.textInputInvalid]}
                 placeholder="Enter 10-digit phone number"
                 placeholderTextColor="#94A3B8"
                 keyboardType="phone-pad"
                 value={patientPhone}
-                onChangeText={setPatientPhone}
+                onChangeText={(value) => {
+                  const digitsOnly = value.replace(/\D/g, '').slice(0, 10);
+                  setPatientPhone(digitsOnly);
+                  if (patientPhoneError) {
+                    setPatientPhoneError(getPatientPhoneError(digitsOnly));
+                  }
+                }}
               />
+              {patientPhoneError && <Text style={styles.fieldErrorText}>{patientPhoneError}</Text>}
             </View>
 
             {errorMessage && (
@@ -806,6 +842,15 @@ const styles = StyleSheet.create({
     minHeight: 48,
     fontSize: 14,
     color: '#0F172A',
+  },
+  textInputInvalid: {
+    borderColor: '#DC2626',
+  },
+  fieldErrorText: {
+    marginTop: 5,
+    fontSize: 11,
+    lineHeight: 15,
+    color: '#B91C1C',
   },
   errorBox: {
     backgroundColor: '#FEF2F2',
