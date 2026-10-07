@@ -13,7 +13,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { broadcastDelay, updateQueueStatus } from '@/services/adminService';
+import { broadcastDelay, updateQueueStatus, getDoctors } from '@/services/adminService';
+import type { Doctor } from '@/services/adminService';
 
 const TODAY = new Date().toISOString().split('T')[0];
 
@@ -27,15 +28,34 @@ const MESSAGE_TEMPLATES = [
 ];
 
 export default function BroadcastDelay() {
-  const { doctorId, doctorName } = useLocalSearchParams<{
-    doctorId: string;
-    doctorName: string;
+  const params = useLocalSearchParams<{
+    doctorId?: string;
+    doctorName?: string;
   }>();
+
+  const [doctorsList, setDoctorsList] = useState<Doctor[]>([]);
+  const [selectedDocId, setSelectedDocId] = useState<string>(params.doctorId || '');
+  const [selectedDocName, setSelectedDocName] = useState<string>(params.doctorName || '');
+  const [showDoctorPicker, setShowDoctorPicker] = useState(false);
 
   const [selectedMinutes, setSelectedMinutes] = useState<number | null>(null);
   const [customMessage, setCustomMessage] = useState('');
   const [saving, setSaving] = useState(false);
   const [sent, setSent] = useState(false);
+
+  React.useEffect(() => {
+    getDoctors().then((docs) => {
+      setDoctorsList(docs);
+      if (!params.doctorId && docs.length > 0) {
+        setSelectedDocId(docs[0].id || '');
+        setSelectedDocName(docs[0].name);
+      }
+    });
+  }, [params.doctorId]);
+
+  const activeDocId = selectedDocId || params.doctorId || (doctorsList[0]?.id ?? '');
+  const activeDocName = selectedDocName || params.doctorName || (doctorsList[0]?.name ?? 'Doctor');
+  const activeDoctor = doctorsList.find((d) => d.id === activeDocId) || doctorsList[0];
 
   const handleTemplateSelect = (msg: string) => {
     setCustomMessage(msg);
@@ -47,20 +67,25 @@ export default function BroadcastDelay() {
       return;
     }
 
+    if (!activeDocId) {
+      Alert.alert('Select Doctor', 'Please select a doctor to broadcast delay for.');
+      return;
+    }
+
     const message =
       customMessage.trim() ||
-      `${doctorName} session is delayed by ${selectedMinutes} minutes. We apologize for the inconvenience.`;
+      `${activeDocName} session is delayed by ${selectedMinutes} minutes. We apologize for the inconvenience.`;
 
     setSaving(true);
     try {
       await Promise.all([
         broadcastDelay({
-          doctorId: doctorId!,
-          doctorName: doctorName!,
+          doctorId: activeDocId,
+          doctorName: activeDocName,
           message,
           minutes: selectedMinutes,
         }),
-        updateQueueStatus(doctorId!, TODAY, 'delayed', selectedMinutes),
+        updateQueueStatus(activeDocId, TODAY, 'delayed', selectedMinutes),
       ]);
       setSent(true);
     } catch (e) {
@@ -79,12 +104,12 @@ export default function BroadcastDelay() {
           </View>
           <Text style={styles.successTitle}>Delay Broadcast Sent!</Text>
           <Text style={styles.successSubtitle}>
-            All patients waiting for {doctorName} have been notified of a +{selectedMinutes}m delay.
+            All patients waiting for {activeDocName} have been notified of a +{selectedMinutes}m delay.
           </Text>
           <View style={styles.successDetails}>
             <View style={styles.successRow}>
               <Text style={styles.successLabel}>Doctor:</Text>
-              <Text style={styles.successValue}>{doctorName}</Text>
+              <Text style={styles.successValue}>{activeDocName}</Text>
             </View>
             <View style={styles.successRow}>
               <Text style={styles.successLabel}>Delay:</Text>
@@ -134,20 +159,60 @@ export default function BroadcastDelay() {
 
         <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
           {/* Doctor Card */}
-          <View style={styles.doctorCard}>
+          <TouchableOpacity
+            style={styles.doctorCard}
+            onPress={() => setShowDoctorPicker(!showDoctorPicker)}
+            activeOpacity={0.8}
+          >
             <View style={styles.doctorAvatar}>
               <Text style={styles.avatarText}>
-                {doctorName ? doctorName.charAt(0) : 'D'}
+                {activeDocName ? activeDocName.charAt(0) : 'D'}
               </Text>
             </View>
             <View style={styles.doctorInfo}>
-              <Text style={styles.doctorName}>{doctorName}</Text>
-              <Text style={styles.doctorSub}>Broadcasting a delay notification</Text>
+              <Text style={styles.doctorName}>{activeDocName}</Text>
+              <Text style={styles.doctorSub}>
+                {activeDoctor ? `${activeDoctor.room} • ${activeDoctor.department}` : 'Broadcasting a delay notification'}
+              </Text>
             </View>
             <View style={styles.broadcastBadge}>
-              <Text style={styles.broadcastBadgeText}>📢 Broadcast</Text>
+              <Text style={styles.broadcastBadgeText}>
+                {showDoctorPicker ? '▲ Close' : '▼ Change'}
+              </Text>
             </View>
-          </View>
+          </TouchableOpacity>
+
+          {/* Doctor Picker Dropdown */}
+          {showDoctorPicker && (
+            <View style={styles.doctorPickerDropdown}>
+              {doctorsList.map((doc) => (
+                <TouchableOpacity
+                  key={doc.id}
+                  style={[
+                    styles.doctorPickerItem,
+                    doc.id === activeDocId && styles.doctorPickerItemActive,
+                  ]}
+                  onPress={() => {
+                    setSelectedDocId(doc.id || '');
+                    setSelectedDocName(doc.name);
+                    setShowDoctorPicker(false);
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.doctorPickerName,
+                      doc.id === activeDocId && styles.doctorPickerNameActive,
+                    ]}
+                  >
+                    {doc.name}
+                  </Text>
+                  <Text style={styles.doctorPickerDept}>
+                    {doc.department} • {doc.room}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
 
           {/* Delay Duration */}
           <Text style={styles.sectionTitle}>Select Delay Duration</Text>
@@ -210,7 +275,7 @@ export default function BroadcastDelay() {
           <View style={styles.messageCard}>
             <TextInput
               style={styles.messageInput}
-              placeholder={`e.g. ${doctorName} session is delayed due to an emergency. We apologize for the inconvenience.`}
+              placeholder={`e.g. ${activeDocName} session is delayed due to an emergency. We apologize for the inconvenience.`}
               placeholderTextColor="#B0B4BA"
               value={customMessage}
               onChangeText={setCustomMessage}
@@ -229,7 +294,7 @@ export default function BroadcastDelay() {
                 <Text style={styles.previewNotifTitle}>OPD Delay Alert</Text>
                 <Text style={styles.previewNotifBody}>
                   {customMessage.trim() ||
-                    `${doctorName} session is delayed by ${selectedMinutes} minutes. We apologize for the inconvenience.`}
+                    `${activeDocName} session is delayed by ${selectedMinutes} minutes. We apologize for the inconvenience.`}
                 </Text>
                 <Text style={styles.previewNotifTime}>Just now</Text>
               </View>
@@ -314,6 +379,44 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   broadcastBadgeText: { fontSize: 11, color: '#EA580C', fontWeight: '700' },
+  doctorPickerDropdown: {
+    backgroundColor: '#fff',
+    marginHorizontal: 16,
+    marginTop: -8,
+    marginBottom: 12,
+    borderRadius: 12,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: '#EAEDF3',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  doctorPickerItem: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  doctorPickerItemActive: {
+    backgroundColor: '#EEF2FF',
+  },
+  doctorPickerName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1A1D2E',
+  },
+  doctorPickerNameActive: {
+    color: '#5B6CF8',
+  },
+  doctorPickerDept: {
+    fontSize: 11,
+    color: '#8B90A7',
+    marginTop: 2,
+  },
 
   sectionTitle: {
     fontSize: 14,

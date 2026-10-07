@@ -14,7 +14,7 @@ import { router } from 'expo-router';
 import { subscribeDoctors, subscribeQueues, updateQueueStatus } from '@/services/adminService';
 import type { Doctor, Queue } from '@/services/adminService';
 
-const DEPARTMENTS = ['All', 'General OPD', 'Cardiology', 'Dental'];
+const DEPARTMENTS = ['All', 'General OPD', 'Cardiology', 'Dental', 'ENT', 'Orthopedics'];
 
 const TODAY = new Date().toISOString().split('T')[0];
 

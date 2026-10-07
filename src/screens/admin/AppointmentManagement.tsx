@@ -88,11 +88,12 @@ export default function AppointmentManagement() {
   const filtered = appointments.filter((a) => {
     const today = getTodayStr();
     const tomorrow = getTomorrowStr();
+    const searchLower = search.trim().toLowerCase();
     const matchSearch =
-      search.trim() === '' ||
-      a.patientName.toLowerCase().includes(search.toLowerCase()) ||
-      a.doctorName.toLowerCase().includes(search.toLowerCase()) ||
-      String(a.tokenNumber).includes(search);
+      searchLower === '' ||
+      (a.patientName?.toLowerCase() ?? '').includes(searchLower) ||
+      (a.doctorName?.toLowerCase() ?? '').includes(searchLower) ||
+      String(a.tokenNumber ?? '').includes(searchLower);
 
     if (!matchSearch) return false;
     if (tab === 'Today') return a.date === today;

@@ -106,8 +106,11 @@ export default function ManageOPD() {
 
   const groupedByDept = DEPARTMENTS.reduce(
     (acc, dept) => {
-      const deptClinics = clinics.filter((c) => c.name.includes(dept.split(' ')[0]));
-      const deptDoctors = doctors.filter((d) => d.department === dept);
+      const deptKey = dept.split(' ')[0]?.toLowerCase() ?? '';
+      const deptClinics = clinics.filter((c) =>
+        c?.name ? c.name.toLowerCase().includes(deptKey) : false
+      );
+      const deptDoctors = doctors.filter((d) => d?.department === dept);
       if (deptClinics.length > 0 || deptDoctors.length > 0) {
         acc[dept] = { clinics: deptClinics, doctors: deptDoctors };
       }
@@ -451,7 +454,16 @@ export default function ManageOPD() {
               <View style={styles.clinicInfo}>
                 <Text style={styles.clinicName}>{clinic.name}</Text>
                 <Text style={styles.clinicSub}>
-                  Rooms {clinic.rooms} • {doctors.filter((d) => d.department.includes(clinic.name.split(' ')[0])).length} Doctors
+                  Rooms {clinic.rooms || '—'} •{' '}
+                  {
+                    doctors.filter((d) => {
+                      const prefix = (clinic?.name || '').split(' ')[0]?.toLowerCase();
+                      return d?.department && prefix
+                        ? d.department.toLowerCase().includes(prefix)
+                        : false;
+                    }).length
+                  }{' '}
+                  Doctors
                 </Text>
               </View>
               <TouchableOpacity style={styles.manageBtn}>
