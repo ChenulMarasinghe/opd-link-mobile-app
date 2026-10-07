@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Image, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
 import { useAuth } from "../../context/AuthContext";
 import { logoutUser } from "../../services/auth";
@@ -59,6 +59,11 @@ export default function VerifyEmailScreen() {
 
   return (
     <View style={styles.container}>
+      <Image
+        source={require("../../../assets/images/logo.png")}
+        style={styles.logo}
+        resizeMode="contain"
+      />
       <Text style={styles.title}>Verify your email</Text>
       <Text style={styles.sub}>We sent a 6-digit code to {profile?.email}</Text>
       <TextInput
@@ -86,6 +91,7 @@ export default function VerifyEmailScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, justifyContent: "center", padding: 24, gap: 12 },
+  logo: { width: 150, height: 150, alignSelf: "center" },
   title: { fontSize: 28, fontWeight: "700", textAlign: "center" },
   sub: { textAlign: "center", color: "#555" },
   input: { borderWidth: 1, borderColor: "#ccc", borderRadius: 10, padding: 14, fontSize: 24, textAlign: "center", letterSpacing: 8 },

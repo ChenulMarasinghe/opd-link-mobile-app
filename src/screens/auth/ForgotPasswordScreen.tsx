@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Image, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
 import { resetPassword } from "../../services/auth";
 import { isValidEmail } from "../../utils/validation";
@@ -27,7 +27,15 @@ export default function ForgotPasswordScreen() {
 
   return (
     <View style={styles.container}>
+      <Image
+        source={require("../../../assets/images/logo.png")}
+        style={styles.logo}
+        resizeMode="contain"
+      />
       <Text style={styles.title}>Forgot password</Text>
+      <Text style={styles.subtitle}>
+        Enter your registered email.
+      </Text>
       <TextInput style={styles.input} placeholder="Email" autoCapitalize="none"
         keyboardType="email-address" value={email} onChangeText={setEmail} />
       <Pressable style={styles.button} onPress={onSend} disabled={busy}>
@@ -42,7 +50,9 @@ export default function ForgotPasswordScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, justifyContent: "center", padding: 24, gap: 12 },
-  title: { fontSize: 28, fontWeight: "700", textAlign: "center", marginBottom: 12 },
+  logo: { width: 150, height: 150, alignSelf: "center" },
+  title: { fontSize: 28, fontWeight: "700", textAlign: "center" },
+  subtitle: { fontSize: 14, color: "#6B7280", textAlign: "center", marginBottom: 12 },
   input: { borderWidth: 1, borderColor: "#ccc", borderRadius: 10, padding: 14 },
   button: { backgroundColor: "#4F46E5", borderRadius: 10, padding: 14, alignItems: "center" },
   buttonText: { color: "#fff", fontWeight: "600" },

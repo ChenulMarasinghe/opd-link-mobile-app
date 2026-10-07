@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Image, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
 import { SymbolView } from "expo-symbols";
 import { loginUser } from "../../services/auth";
@@ -34,7 +34,13 @@ export default function LoginScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>OPD Link</Text>
+      <Image
+        source={require("../../../assets/images/logo.png")}
+        style={styles.logo}
+        resizeMode="contain"
+      />
+      <Text style={styles.subtitle}>Log in to your account</Text>
+
       <TextInput style={styles.input} placeholder="Email" autoCapitalize="none"
         keyboardType="email-address" value={email} onChangeText={setEmail} />
       <View style={styles.passwordField}>
@@ -64,7 +70,9 @@ export default function LoginScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, justifyContent: "center", padding: 24, gap: 12 },
-  title: { fontSize: 32, fontWeight: "700", textAlign: "center", marginBottom: 16 },
+  logo: { width: 150, height: 150, alignSelf: "center" },
+  title: { fontSize: 32, fontWeight: "700", textAlign: "center" },
+  subtitle: { fontSize: 15, color: "#6B7280", textAlign: "center", marginBottom: 12 },
   input: { borderWidth: 1, borderColor: "#ccc", borderRadius: 10, padding: 14 },
   passwordField: { flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: "#ccc", borderRadius: 10 },
   passwordInput: { flex: 1, padding: 14 },

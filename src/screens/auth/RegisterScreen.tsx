@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { router } from "expo-router";
 import { SymbolView } from "expo-symbols";
 import { registerUser } from "../../services/auth";
@@ -57,7 +57,15 @@ export default function RegisterScreen() {
   };
 
   return (
-    <View style={styles.container}>
+    <ScrollView
+      contentContainerStyle={styles.container}
+      keyboardShouldPersistTaps="handled"
+    >
+      <Image
+        source={require("../../../assets/images/logo.png")}
+        style={styles.logo}
+        resizeMode="contain"
+      />
       <Text style={styles.title}>Create account</Text>
 
       <TextInput style={styles.input} placeholder="Full name" value={name} onChangeText={setName} />
@@ -105,12 +113,13 @@ export default function RegisterScreen() {
       <Pressable onPress={() => router.back()}>
         <Text style={styles.link}>Back to login</Text>
       </Pressable>
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: "center", padding: 24, gap: 8 },
+  container: { flexGrow: 1, justifyContent: "center", padding: 24, gap: 8 },
+  logo: { width: 150, height: 150, alignSelf: "center" },
   title: { fontSize: 28, fontWeight: "700", textAlign: "center", marginBottom: 12 },
   input: { borderWidth: 1, borderColor: "#ccc", borderRadius: 10, padding: 14 },
   passwordField: { flexDirection: "row", alignItems: "center", borderWidth: 1, borderColor: "#ccc", borderRadius: 10 },
