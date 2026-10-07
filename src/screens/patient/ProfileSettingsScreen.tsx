@@ -22,6 +22,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 const PATIENT_ID = 'patient_demo';
 
 type EditableDetails = Pick<PatientProfile, 'fullName' | 'phone' | 'email' | 'nicNumber'>;
+type EditableFieldErrors = Record<keyof EditableDetails, string | null>;
 
 interface ProfileSettingsScreenProps {
   onBack?: () => void;
@@ -35,12 +36,53 @@ const EMPTY_DETAILS: EditableDetails = {
   nicNumber: '',
 };
 
+const EMPTY_FIELD_ERRORS: EditableFieldErrors = {
+  fullName: null,
+  phone: null,
+  email: null,
+  nicNumber: null,
+};
+
+function validateFullName(value: string): string | null {
+  const name = value.trim();
+  if (!name) return 'Enter your full name.';
+  if (!/^[A-Za-z]+(?: +[A-Za-z]+)*$/.test(name)) {
+    return 'Use letters and spaces only.';
+  }
+  return null;
+}
+
+function validatePhone(value: string): string | null {
+  if (!value) return 'Enter your contact number.';
+  if (!/^07\d{8}$/.test(value)) return 'Enter 10 digits starting with 07.';
+  return null;
+}
+
+function validateEmail(value: string): string | null {
+  const email = value.trim();
+  if (!email) return 'Enter your email address.';
+  if (!/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/.test(email)) {
+    return 'Enter a valid email address.';
+  }
+  return null;
+}
+
+function validateNicNumber(value: string): string | null {
+  const nicNumber = value.trim().toUpperCase();
+  if (!nicNumber) return 'Enter your NIC or ID number.';
+  if (!/^\d{12}$/.test(nicNumber) && !/^\d{9}[VX]$/.test(nicNumber)) {
+    return 'Enter a valid NIC or ID number.';
+  }
+  return null;
+}
+
 export default function ProfileSettingsScreen({
   onBack,
   onOpenClinicStatus,
 }: ProfileSettingsScreenProps) {
   const [profile, setProfile] = useState<PatientProfile | null>(null);
   const [draft, setDraft] = useState<EditableDetails>(EMPTY_DETAILS);
+  const [fieldErrors, setFieldErrors] = useState<EditableFieldErrors>(EMPTY_FIELD_ERRORS);
   const [loading, setLoading] = useState<boolean>(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [editing, setEditing] = useState<boolean>(false);
@@ -96,6 +138,7 @@ export default function ProfileSettingsScreen({
       nicNumber: profile.nicNumber,
     });
     setFeedback(null);
+    setFieldErrors(EMPTY_FIELD_ERRORS);
     setEditing(true);
   };
 
@@ -108,40 +151,35 @@ export default function ProfileSettingsScreen({
       nicNumber: profile.nicNumber,
     });
     setFeedback(null);
+    setFieldErrors(EMPTY_FIELD_ERRORS);
     setEditing(false);
   };
 
   const saveProfile = async () => {
-    if (!draft.fullName.trim()) {
-      setFeedback({ type: 'error', message: 'Enter your full name.' });
-      return;
-    }
-    if (!/^\+?[0-9\s-]{7,15}$/.test(draft.phone.trim())) {
-      setFeedback({ type: 'error', message: 'Enter a valid contact number.' });
-      return;
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(draft.email.trim())) {
-      setFeedback({ type: 'error', message: 'Enter a valid email address.' });
-      return;
-    }
-    if (!/^(?:\d{9}[VXvx]|\d{12})$/.test(draft.nicNumber.trim())) {
-      setFeedback({ type: 'error', message: 'Enter a valid NIC or ID number.' });
-      return;
-    }
-
-    setSaving(true);
-    setFeedback(null);
     const updates: EditableDetails = {
       fullName: draft.fullName.trim(),
-      phone: draft.phone.trim(),
+      phone: draft.phone,
       email: draft.email.trim(),
-      nicNumber: draft.nicNumber.trim(),
+      nicNumber: draft.nicNumber.trim().toUpperCase(),
     };
+    const errors: EditableFieldErrors = {
+      fullName: validateFullName(updates.fullName),
+      phone: validatePhone(updates.phone),
+      email: validateEmail(updates.email),
+      nicNumber: validateNicNumber(updates.nicNumber),
+    };
+
+    setFieldErrors(errors);
+    setFeedback(null);
+    if (Object.values(errors).some(Boolean)) return;
+
+    setSaving(true);
 
     try {
       await updatePatientProfile(PATIENT_ID, updates);
       setProfile((current) => current ? { ...current, ...updates } : current);
       setEditing(false);
+      setFieldErrors(EMPTY_FIELD_ERRORS);
       setFeedback({ type: 'success', message: 'Profile updated successfully.' });
     } catch (error) {
       setFeedback({
@@ -257,7 +295,13 @@ export default function ProfileSettingsScreen({
                 value={editing ? draft.fullName : profile.fullName}
                 placeholder="Enter full name"
                 editing={editing}
-                onChangeText={(fullName) => setDraft((current) => ({ ...current, fullName }))}
+                error={fieldErrors.fullName}
+                onChangeText={(fullName) => {
+                  setDraft((current) => ({ ...current, fullName }));
+                  if (fieldErrors.fullName) {
+                    setFieldErrors((current) => ({ ...current, fullName: validateFullName(fullName) }));
+                  }
+                }}
                 autoCapitalize="words"
               />
               <ProfileField
@@ -265,7 +309,14 @@ export default function ProfileSettingsScreen({
                 value={editing ? draft.phone : profile.phone}
                 placeholder="Enter contact number"
                 editing={editing}
-                onChangeText={(phone) => setDraft((current) => ({ ...current, phone }))}
+                error={fieldErrors.phone}
+                onChangeText={(value) => {
+                  const phone = value.replace(/\D/g, '').slice(0, 10);
+                  setDraft((current) => ({ ...current, phone }));
+                  if (fieldErrors.phone) {
+                    setFieldErrors((current) => ({ ...current, phone: validatePhone(phone) }));
+                  }
+                }}
                 keyboardType="phone-pad"
               />
               <ProfileField
@@ -273,7 +324,13 @@ export default function ProfileSettingsScreen({
                 value={editing ? draft.email : profile.email}
                 placeholder="Enter email address"
                 editing={editing}
-                onChangeText={(email) => setDraft((current) => ({ ...current, email }))}
+                error={fieldErrors.email}
+                onChangeText={(email) => {
+                  setDraft((current) => ({ ...current, email }));
+                  if (fieldErrors.email) {
+                    setFieldErrors((current) => ({ ...current, email: validateEmail(email) }));
+                  }
+                }}
                 keyboardType="email-address"
                 autoCapitalize="none"
               />
@@ -282,7 +339,14 @@ export default function ProfileSettingsScreen({
                 value={editing ? draft.nicNumber : profile.nicNumber}
                 placeholder="Enter NIC or ID number"
                 editing={editing}
-                onChangeText={(nicNumber) => setDraft((current) => ({ ...current, nicNumber }))}
+                error={fieldErrors.nicNumber}
+                onChangeText={(value) => {
+                  const nicNumber = value.toUpperCase();
+                  setDraft((current) => ({ ...current, nicNumber }));
+                  if (fieldErrors.nicNumber) {
+                    setFieldErrors((current) => ({ ...current, nicNumber: validateNicNumber(nicNumber) }));
+                  }
+                }}
                 autoCapitalize="characters"
                 last
               />
@@ -352,6 +416,7 @@ interface ProfileFieldProps {
   value: string;
   placeholder: string;
   editing: boolean;
+  error: string | null;
   onChangeText: (value: string) => void;
   keyboardType?: 'default' | 'email-address' | 'phone-pad';
   autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
@@ -363,30 +428,34 @@ function ProfileField({
   value,
   placeholder,
   editing,
+  error,
   onChangeText,
   keyboardType = 'default',
   autoCapitalize = 'sentences',
   last = false,
 }: ProfileFieldProps) {
   return (
-    <View style={[styles.infoRow, !last && styles.rowDivider]}>
-      <Text style={styles.infoLabel}>{label}</Text>
-      {editing ? (
-        <TextInput
-          style={styles.infoInput}
-          value={value}
-          placeholder={placeholder}
-          placeholderTextColor="#94A3B8"
-          onChangeText={onChangeText}
-          keyboardType={keyboardType}
-          autoCapitalize={autoCapitalize}
-          autoCorrect={false}
-        />
-      ) : (
-        <Text style={styles.infoValue} numberOfLines={1}>
-          {value || 'Not provided'}
-        </Text>
-      )}
+    <View style={[styles.infoField, !last && styles.rowDivider]}>
+      <View style={styles.infoRow}>
+        <Text style={styles.infoLabel}>{label}</Text>
+        {editing ? (
+          <TextInput
+            style={[styles.infoInput, error && styles.infoInputInvalid]}
+            value={value}
+            placeholder={placeholder}
+            placeholderTextColor="#94A3B8"
+            onChangeText={onChangeText}
+            keyboardType={keyboardType}
+            autoCapitalize={autoCapitalize}
+            autoCorrect={false}
+          />
+        ) : (
+          <Text style={styles.infoValue} numberOfLines={1}>
+            {value || 'Not provided'}
+          </Text>
+        )}
+      </View>
+      {editing && error !== null && <Text style={styles.fieldError}>{error}</Text>}
     </View>
   );
 }
@@ -621,6 +690,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 8,
   },
+  infoField: {
+    paddingVertical: 3,
+  },
   rowDivider: {
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#EAF0F7',
@@ -649,6 +721,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#DCE4F0',
     borderRadius: 9,
+  },
+  infoInputInvalid: {
+    borderColor: '#DC2626',
+  },
+  fieldError: {
+    marginLeft: '40%',
+    marginTop: 2,
+    marginBottom: 5,
+    fontSize: 10,
+    lineHeight: 14,
+    color: '#B91C1C',
   },
   preferencesCard: {
     backgroundColor: '#FFFFFF',
