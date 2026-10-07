@@ -1,22 +1,49 @@
 import { router } from 'expo-router';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
-
-const logs = [
-  { level: 'Critical', title: 'Database Connection Failed', detail: 'Temporary connection failure detected', time: 'Today, 09:18 AM' },
-  { level: 'Warning', title: 'API Request Timeout', detail: 'Appointment service exceeded response threshold', time: 'Today, 10:42 AM' },
-  { level: 'Warning', title: 'Notification Delivery Delay', detail: 'Push notification delivery exceeded 30 seconds', time: 'Yesterday, 04:35 PM' },
-] as const;
+import { getErrorLogs, getErrorSummary, type ErrorLog, type ErrorSummary } from '@/services/errorLogService';
 
 export default function ErrorLogsScreen() {
   const insets = useSafeAreaInsets();
+  const [logs, setLogs] = useState<ErrorLog[]>([]);
+  const [summary, setSummary] = useState<ErrorSummary>({ critical: 0, warnings: 0, resolved: 0 });
+  const [search, setSearch] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  const loadLogs = async () => {
+    setRefreshing(true);
+    try {
+      const [nextLogs, nextSummary] = await Promise.all([getErrorLogs(), getErrorSummary()]);
+      setLogs(nextLogs);
+      setSummary(nextSummary);
+    } catch (error) {
+      console.error('Unable to load error logs from Firestore.', error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadLogs();
+  }, []);
+
+  const filteredLogs = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    if (!term) return logs;
+    return logs.filter((log) =>
+      [log.title, log.message, log.service].some((value) => value.toLowerCase().includes(term))
+    );
+  }, [logs, search]);
 
   return (
     <SafeAreaView edges={['top']} style={styles.safeArea}>
-      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 84 }]} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 84 }]} showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={loadLogs} />}>
         <View style={styles.header}>
           <Pressable accessibilityRole="button" accessibilityLabel="Back to dashboard" onPress={() => router.replace('/it-dashboard')} style={styles.backButton}>
             <SymbolView name={{ ios: 'chevron.left', android: 'arrow_back', web: 'arrow_back' }} size={15} tintColor="#18233A" />
@@ -28,28 +55,34 @@ export default function ErrorLogsScreen() {
           <ThemedText style={styles.badge}>OPD</ThemedText>
         </View>
 
+        <TextInput value={search} onChangeText={setSearch} placeholder="Search Error Logs" placeholderTextColor="#91A0B5" style={styles.searchInput} />
         <View style={styles.summaryRow}>
-          <Summary label="Critical" value="2" color="#F04444" background="#FFE0E0" />
-          <Summary label="Warnings" value="5" color="#E99A00" background="#FFF1C8" />
-          <Summary label="Resolved" value="18" color="#0AAB83" background="#DDF8F1" />
+          <Summary label="Critical" value={String(summary.critical)} color="#F04444" background="#FFE0E0" />
+          <Summary label="Warnings" value={String(summary.warnings)} color="#E99A00" background="#FFF1C8" />
+          <Summary label="Resolved" value={String(summary.resolved)} color="#0AAB83" background="#DDF8F1" />
         </View>
 
         <ThemedText style={styles.sectionTitle}>Recent Errors</ThemedText>
         <View style={styles.list}>
-          {logs.map((log) => (
-            <View key={log.title} style={styles.logCard}>
+          {filteredLogs.map((log) => (
+            <View key={log.id} style={styles.logCard}>
               <View style={styles.logTop}>
-                <ThemedText style={[styles.level, log.level === 'Critical' ? styles.critical : styles.warning]}>{log.level}</ThemedText>
-                <ThemedText style={styles.time}>{log.time}</ThemedText>
+                <ThemedText style={[styles.level, log.severity === 'critical' ? styles.critical : styles.warning]}>{capitalize(log.severity)}</ThemedText>
+                <ThemedText style={styles.time}>{formatTime(log.createdAt)}</ThemedText>
               </View>
               <ThemedText style={styles.title}>{log.title}</ThemedText>
-              <ThemedText style={styles.detail}>{log.detail}</ThemedText>
-              <Pressable accessibilityRole="button" onPress={() => undefined} style={styles.detailsButton}>
+              <ThemedText style={styles.detail}>{log.message}</ThemedText>
+              <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/error-log-details', params: { id: log.id } })} style={styles.detailsButton}>
                 <ThemedText style={styles.detailsText}>View Details ›</ThemedText>
               </Pressable>
             </View>
           ))}
+          {!loading && filteredLogs.length === 0 ? <ThemedText style={styles.emptyText}>No error logs found</ThemedText> : null}
         </View>
+        <Pressable accessibilityRole="button" onPress={() => void loadLogs()} style={styles.refreshButton}>
+          <SymbolView name={{ ios: 'arrow.clockwise', android: 'refresh', web: 'refresh' }} size={12} tintColor="#FFF" />
+          <ThemedText style={styles.refreshText}>Refresh</ThemedText>
+        </Pressable>
       </ScrollView>
 
       <View style={[styles.bottomNavigation, { paddingBottom: Math.max(insets.bottom, 8) }]}>
@@ -90,6 +123,7 @@ const styles = StyleSheet.create({
   subtitle: { color: '#43536D', fontSize: 10 },
   badge: { color: '#6875FF', backgroundColor: '#E8EBFF', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 5, fontSize: 9, fontWeight: '700' },
   summaryRow: { flexDirection: 'row', gap: 7, marginBottom: 16 },
+  searchInput: { backgroundColor: '#FFF', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, color: '#18233A', fontSize: 11, marginBottom: 12 },
   summary: { flex: 1, borderRadius: 12, padding: 9 },
   summaryLabel: { fontSize: 9 },
   summaryValue: { fontSize: 20, fontWeight: '800' },
@@ -108,4 +142,15 @@ const styles = StyleSheet.create({
   bottomNavigation: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: '#FFF', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#DDE8F5', flexDirection: 'row', justifyContent: 'space-around', paddingTop: 8 },
   navItem: { alignItems: 'center', minWidth: 64, gap: 3 },
   navLabel: { fontSize: 8 },
+  emptyText: { color: '#536681', fontSize: 11, padding: 16, textAlign: 'center' },
+  refreshButton: { alignSelf: 'flex-end', flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#6875FF', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 7, marginTop: 10 },
+  refreshText: { color: '#FFF', fontSize: 9, fontWeight: '700' },
 });
+
+function capitalize(value: string) {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function formatTime(timestamp: ErrorLog['createdAt']) {
+  return timestamp.toDate().toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+}

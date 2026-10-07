@@ -1,25 +1,26 @@
 import { SymbolView } from 'expo-symbols';
 import { router } from 'expo-router';
-import { useMemo } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ActivityItem, type ActivityTone } from '@/components/it-dashboard/activity-item';
 import { StatusCard, type StatusCardTone } from '@/components/it-dashboard/status-card';
 import LogoutButton from '@/components/LogoutButton';
 import { ThemedText } from '@/components/themed-text';
+import {
+  getDashboardData,
+  type ITDashboardData,
+  type SystemActivity,
+} from '@/services/itDashboardService';
 
-const dashboardCards: { title: string; subtitle: string; status: string; tone: StatusCardTone }[] = [
-  { title: 'IT Monitoring', subtitle: 'System health & performance', status: '99.9% Uptime', tone: 'monitoring' },
-  { title: 'Error Logs', subtitle: 'Technical issues & events', status: '2 Critical Alerts', tone: 'critical' },
-  { title: 'Maintenance & Backup', subtitle: 'System maintenance status', status: 'Backup Completed', tone: 'maintenance' },
-];
-
-const recentActivities: { title: string; time: string; source: string; status: string; tone: ActivityTone }[] = [
-  { title: 'Database backup completed successfully', time: 'Today, 03:00 AM', source: 'Automated', status: 'SUCCESS', tone: 'success' },
-  { title: 'Database connection timeout', time: 'Today, 09:18 AM', source: 'DB Server', status: 'CRITICAL', tone: 'critical' },
-  { title: 'API latency limit warning triggered', time: 'Yesterday, 04:35 PM', source: 'API Service', status: 'WARNING', tone: 'warning' },
-];
+const emptyDashboardData: ITDashboardData = {
+  systemHealth: null,
+  unresolvedCriticalErrors: 0,
+  latestBackup: null,
+  latestMaintenance: null,
+  recentActivities: [],
+};
 
 const navigationItems = [
   { label: 'Dashboard', ios: 'house.fill', android: 'home', web: 'home', active: true },
@@ -30,7 +31,67 @@ const navigationItems = [
 
 export default function ITDashboardScreen() {
   const insets = useSafeAreaInsets();
-  const cards = useMemo(() => dashboardCards, []);
+  const [dashboardData, setDashboardData] = useState(emptyDashboardData);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const loadDashboardData = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
+
+    try {
+      setDashboardData(await getDashboardData());
+      setLoadError(null);
+    } catch (error) {
+      console.error('Unable to load IT dashboard data from Firestore.', error);
+      setLoadError('Live data is unavailable');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadDashboardData();
+  }, [loadDashboardData]);
+
+  const cards = useMemo(() => {
+    const health = dashboardData.systemHealth;
+    const uptime = health ? `${health.uptimePercentage.toFixed(1)}% Uptime` : 'Unavailable';
+    const errorStatus = loading ? 'Loading...' : `${dashboardData.unresolvedCriticalErrors} Critical Alerts`;
+    const backupStatus = loading
+      ? 'Loading...'
+      : dashboardData.latestBackup?.status ?? 'Unavailable';
+
+    return [
+      { title: 'IT Monitoring', subtitle: 'System health & performance', status: uptime, tone: 'monitoring' as const },
+      { title: 'Error Logs', subtitle: 'Technical issues & events', status: errorStatus, tone: 'critical' as const },
+      { title: 'Maintenance & Backup', subtitle: 'System maintenance status', status: backupStatus, tone: 'maintenance' as const },
+    ];
+  }, [dashboardData, loading]);
+
+  const recentActivities = useMemo(
+    () => dashboardData.recentActivities.map(toActivityItem),
+    [dashboardData.recentActivities]
+  );
+
+  const overallStatus = dashboardData.systemHealth?.overallStatus;
+  const operationalTitle =
+    overallStatus === 'critical'
+      ? 'Critical System Alert'
+      : overallStatus === 'warning'
+        ? 'System Warning'
+        : overallStatus === 'operational'
+          ? 'All Systems Operational'
+          : 'System Status Unavailable';
+  const operationalSubtitle = loadError
+    ? loadError
+    : loading
+      ? 'Loading live system status...'
+      : overallStatus === 'operational'
+        ? 'Uptime normal • checked just now'
+        : 'Review the latest system status';
 
   const handleCardPress = (title: string) => {
     if (title === 'IT Monitoring') {
@@ -44,7 +105,12 @@ export default function ITDashboardScreen() {
 
   return (
     <SafeAreaView edges={['top']} style={styles.safeArea}>
-      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 84 }]} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 84 }]}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={() => void loadDashboardData(true)} />
+        }>
         <View style={styles.header}>
           <View>
             <ThemedText style={styles.heading}>IT Dashboard</ThemedText>
@@ -58,8 +124,8 @@ export default function ITDashboardScreen() {
             <SymbolView name={{ ios: 'checkmark', android: 'check', web: 'check' }} size={17} tintColor="#0AAB83" />
           </View>
           <View>
-            <ThemedText style={styles.operationalTitle}>All Systems Operational</ThemedText>
-            <ThemedText style={styles.operationalSubtitle}>Uptime normal • checked just now</ThemedText>
+            <ThemedText style={styles.operationalTitle}>{operationalTitle}</ThemedText>
+            <ThemedText style={styles.operationalSubtitle}>{operationalSubtitle}</ThemedText>
           </View>
         </View>
 
@@ -71,9 +137,15 @@ export default function ITDashboardScreen() {
 
         <ThemedText style={styles.sectionTitle}>Recent System Activity</ThemedText>
         <View style={styles.activityCard}>
-          {recentActivities.map((activity, index) => (
-            <ActivityItem key={activity.title} {...activity} isLast={index === recentActivities.length - 1} />
-          ))}
+          {recentActivities.length > 0 ? (
+            recentActivities.map((activity, index) => (
+              <ActivityItem key={activity.id} {...activity} isLast={index === recentActivities.length - 1} />
+            ))
+          ) : (
+            <ThemedText style={styles.emptyActivity}>
+              {loading ? 'Loading recent activity...' : 'No recent system activity'}
+            </ThemedText>
+          )}
         </View>
       </ScrollView>
 
@@ -114,4 +186,39 @@ const styles = StyleSheet.create({
   bottomNavigation: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: '#FFFFFF', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#DDE8F5', flexDirection: 'row', justifyContent: 'space-around', paddingTop: 8 },
   navItem: { alignItems: 'center', justifyContent: 'center', minWidth: 64, gap: 3 },
   navLabel: { fontSize: 8, lineHeight: 11 },
+  emptyActivity: { color: '#91A0B5', fontSize: 10, padding: 16, textAlign: 'center' },
 });
+
+function toActivityItem(activity: SystemActivity): {
+  id: string;
+  title: string;
+  time: string;
+  source: string;
+  status: string;
+  tone: ActivityTone;
+} {
+  return {
+    id: activity.id,
+    title: activity.title,
+    time: formatActivityTime(activity.createdAt),
+    source: activity.description ?? activity.type,
+    status: activity.status.toUpperCase(),
+    tone:
+      activity.status === 'critical'
+        ? 'critical'
+        : activity.status === 'warning'
+          ? 'warning'
+          : 'success',
+  };
+}
+
+function formatActivityTime(timestamp: SystemActivity['createdAt']): string {
+  const date = timestamp.toDate();
+  const today = new Date();
+  const isToday =
+    date.getFullYear() === today.getFullYear() &&
+    date.getMonth() === today.getMonth() &&
+    date.getDate() === today.getDate();
+  const time = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  return `${isToday ? 'Today' : date.toLocaleDateString([], { month: 'short', day: 'numeric' })}, ${time}`;
+}

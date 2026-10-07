@@ -1,16 +1,18 @@
 ﻿import { router } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
+import { runMonitoringChecks, type MonitoringResult, type ServiceStatus } from '@/services/monitoringService';
 
-const services = [
-  { label: 'Appointment Service', symbols: { ios: 'calendar', android: 'event', web: 'event' }, status: 'Operational' },
-  { label: 'Queue Service', symbols: { ios: 'person.2.fill', android: 'people', web: 'people' }, status: 'Operational' },
-  { label: 'Notification Service', symbols: { ios: 'bell.fill', android: 'notifications', web: 'notifications' }, status: 'Operational' },
-  { label: 'Authentication', symbols: { ios: 'lock.fill', android: 'lock', web: 'lock' }, status: 'Operational' },
-  { label: 'Database', symbols: { ios: 'externaldrive.fill', android: 'storage', web: 'storage' }, status: 'Operational' },
+const serviceDefinitions = [
+  { key: 'appointment', label: 'Appointment Service', symbols: { ios: 'calendar', android: 'event', web: 'event' } },
+  { key: 'queue', label: 'Queue Service', symbols: { ios: 'person.2.fill', android: 'people', web: 'people' } },
+  { key: 'notification', label: 'Notification Service', symbols: { ios: 'bell.fill', android: 'notifications', web: 'notifications' } },
+  { key: 'authentication', label: 'Authentication', symbols: { ios: 'lock.fill', android: 'lock', web: 'lock' } },
+  { key: 'database', label: 'Database', symbols: { ios: 'externaldrive.fill', android: 'storage', web: 'storage' } },
 ] as const;
 
 const navigationItems = [
@@ -22,10 +24,43 @@ const navigationItems = [
 
 export default function ITMonitoringScreen() {
   const insets = useSafeAreaInsets();
+  const [monitoring, setMonitoring] = useState<MonitoringResult | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const refreshMonitoring = useCallback(async (saveSnapshot = false) => {
+    if (saveSnapshot) setRefreshing(true);
+    else setLoading(true);
+
+    try {
+      setMonitoring(await runMonitoringChecks(saveSnapshot));
+    } catch (error) {
+      console.error('Unable to load IT monitoring data.', error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshMonitoring();
+    const interval = setInterval(() => {
+      void refreshMonitoring();
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [refreshMonitoring]);
+
+  const status = monitoring?.overallStatus;
+  const statusTitle = status === 'critical' ? 'Critical System Alert' : status === 'warning' ? 'System Warning' : status === 'operational' ? 'All Systems Operational' : 'Checking System Status';
+  const statusSubtitle = loading ? 'Checking live services...' : status === 'operational' ? 'Last checked just now' : 'Review service health below';
+  const serviceStatuses = monitoring?.services;
 
   return (
     <SafeAreaView edges={['top']} style={styles.safeArea}>
-      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 88 }]} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 88 }]}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void refreshMonitoring(true)} />}>
         <View style={styles.header}>
           <Pressable accessibilityRole="button" accessibilityLabel="Back to dashboard" onPress={() => router.replace('/it-dashboard')} style={styles.backButton}>
             <SymbolView name={{ ios: 'chevron.left', android: 'arrow_back', web: 'arrow_back' }} size={15} tintColor="#18233A" />
@@ -45,8 +80,8 @@ export default function ITMonitoringScreen() {
             <SymbolView name={{ ios: 'checkmark', android: 'check', web: 'check' }} size={16} tintColor="#0AAB83" />
           </View>
           <View>
-            <ThemedText style={styles.operationalTitle}>All Systems Operational</ThemedText>
-            <ThemedText style={styles.operationalSubtitle}>Last checked just now</ThemedText>
+            <ThemedText style={styles.operationalTitle}>{statusTitle}</ThemedText>
+            <ThemedText style={styles.operationalSubtitle}>{statusSubtitle}</ThemedText>
           </View>
         </View>
 
@@ -55,24 +90,24 @@ export default function ITMonitoringScreen() {
             <ThemedText style={styles.cardLabel}>System Availability</ThemedText>
             <View style={styles.changeBadge}>
               <SymbolView name={{ ios: 'arrow.up', android: 'arrow_upward', web: 'arrow_upward' }} size={9} tintColor="#0AAB83" />
-              <ThemedText style={styles.changeText}>0.05%</ThemedText>
+              <ThemedText style={styles.changeText}>{formatChange(monitoring?.availability.change)}</ThemedText>
             </View>
           </View>
           <View style={styles.availabilityValueRow}>
-            <ThemedText style={styles.availabilityValue}>99.9%</ThemedText>
-            <ThemedText style={styles.period}>Last 30 days</ThemedText>
+            <ThemedText style={styles.availabilityValue}>{formatPercentage(monitoring?.availability.percentage)}</ThemedText>
+            <ThemedText style={styles.period}>{monitoring?.availability.period ?? 'Current check'}</ThemedText>
           </View>
         </View>
 
         <View style={styles.metricsRow}>
-          <MetricCard label="API Response" value="184 ms" status="HEALTHY" symbols={{ ios: 'speedometer', android: 'speed', web: 'speed' }} />
-          <MetricCard label="Server Load" value="42%" status="NORMAL" symbols={{ ios: 'server.rack', android: 'dns', web: 'dns' }} />
-          <MetricCard label="Database" value="28%" status="HEALTHY" symbols={{ ios: 'externaldrive.fill', android: 'storage', web: 'storage' }} />
+          <MetricCard label="API Response" value={formatResponseTime(monitoring?.responseTime)} status={formatHealthStatus(monitoring?.responseTime)} symbols={{ ios: 'speedometer', android: 'speed', web: 'speed' }} />
+          <MetricCard label="Server Load" value="N/A" status="NOT MEASURED" symbols={{ ios: 'server.rack', android: 'dns', web: 'dns' }} />
+          <MetricCard label="Database" value={monitoring?.databaseUsage ?? 'Checking...'} status={formatServiceStatus(serviceStatuses?.database)} symbols={{ ios: 'externaldrive.fill', android: 'storage', web: 'storage' }} />
         </View>
 
         <ThemedText style={styles.sectionTitle}>Services</ThemedText>
         <View style={styles.servicesCard}>
-          {services.map((service) => (
+          {serviceDefinitions.map((service) => (
             <View key={service.label} style={styles.serviceRow}>
               <View style={styles.serviceIcon}>
                 <SymbolView name={service.symbols} size={13} tintColor="#6875FF" />
@@ -80,7 +115,7 @@ export default function ITMonitoringScreen() {
               <ThemedText style={styles.serviceLabel}>{service.label}</ThemedText>
               <View style={styles.serviceStatus}>
                 <View style={styles.statusDot} />
-                <ThemedText style={styles.statusText}>{service.status}</ThemedText>
+                <ThemedText style={styles.statusText}>{formatServiceStatus(serviceStatuses?.[service.key])}</ThemedText>
               </View>
             </View>
           ))}
@@ -89,9 +124,9 @@ export default function ITMonitoringScreen() {
         <View style={styles.footerRow}>
           <View style={styles.updated}>
             <SymbolView name={{ ios: 'clock', android: 'schedule', web: 'schedule' }} size={11} tintColor="#91A0B5" />
-            <ThemedText style={styles.updatedText}>Last updated 11:12 AM</ThemedText>
+            <ThemedText style={styles.updatedText}>Last updated {formatUpdatedTime(monitoring?.lastUpdated)}</ThemedText>
           </View>
-          <Pressable accessibilityRole="button" style={({ pressed }) => [styles.refreshButton, pressed && styles.pressed]}>
+          <Pressable accessibilityRole="button" onPress={() => void refreshMonitoring(true)} style={({ pressed }) => [styles.refreshButton, pressed && styles.pressed]}>
             <SymbolView name={{ ios: 'arrow.clockwise', android: 'refresh', web: 'refresh' }} size={12} tintColor="#FFFFFF" />
             <ThemedText style={styles.refreshText}>Refresh</ThemedText>
           </Pressable>
@@ -117,6 +152,33 @@ export default function ITMonitoringScreen() {
       </View>
     </SafeAreaView>
   );
+}
+
+function formatPercentage(value: number | undefined) {
+  return value === undefined ? '--' : `${value.toFixed(1)}%`;
+}
+
+function formatChange(value: number | null | undefined) {
+  return value === null || value === undefined ? '--' : `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
+}
+
+function formatResponseTime(value: number | null | undefined) {
+  return value === null || value === undefined ? '--' : `${value} ms`;
+}
+
+function formatHealthStatus(value: number | null | undefined) {
+  return value === null || value === undefined ? 'CHECKING' : value < 500 ? 'HEALTHY' : 'SLOW';
+}
+
+function formatServiceStatus(value: ServiceStatus | undefined) {
+  if (value === 'operational') return 'Operational';
+  if (value === 'warning') return 'Warning';
+  if (value === 'down') return 'Down';
+  return 'Checking...';
+}
+
+function formatUpdatedTime(value: MonitoringResult['lastUpdated'] | undefined) {
+  return value ? value.toDate().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '--';
 }
 
 function MetricCard({ label, value, status, symbols }: { label: string; value: string; status: string; symbols: { ios: 'speedometer' | 'server.rack' | 'externaldrive.fill'; android: 'speed' | 'dns' | 'storage'; web: 'speed' | 'dns' | 'storage' } }) {
