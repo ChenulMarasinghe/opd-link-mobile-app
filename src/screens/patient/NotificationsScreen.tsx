@@ -29,13 +29,36 @@ export default function NotificationsScreen({
   const [notifications, setNotifications] = useState<PatientNotification[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
+  const [showNewNotificationMessage, setShowNewNotificationMessage] =
+    useState<boolean>(false);
 
   // Real-time Firestore Subscription
   useEffect(() => {
+    let knownNotificationIds: Set<string> | null = null;
+    let messageTimeout: ReturnType<typeof setTimeout> | undefined;
+
     setLoading(true);
+    setShowNewNotificationMessage(false);
     const unsubscribe = subscribeNotifications(
       patientId,
       (updatedList) => {
+        const updatedIds = new Set(updatedList.map((notification) => notification.id));
+        const previousIds = knownNotificationIds;
+        const hasNewNotification =
+          previousIds !== null &&
+          updatedList.some(
+            (notification) => !previousIds.has(notification.id)
+          );
+
+        if (hasNewNotification) {
+          setShowNewNotificationMessage(true);
+          if (messageTimeout) clearTimeout(messageTimeout);
+          messageTimeout = setTimeout(() => {
+            setShowNewNotificationMessage(false);
+          }, 2500);
+        }
+
+        knownNotificationIds = updatedIds;
         setNotifications(updatedList);
         setLoading(false);
       },
@@ -45,7 +68,10 @@ export default function NotificationsScreen({
       }
     );
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      if (messageTimeout) clearTimeout(messageTimeout);
+    };
   }, [patientId]);
 
   // Handle Mark as Read
@@ -181,15 +207,13 @@ export default function NotificationsScreen({
         )}
       </ScrollView>
 
-      {/* Real-time Note Banner */}
-      <View style={styles.bannerContainer}>
-        <View style={styles.bannerPill}>
-          <Text style={styles.bannerIcon}>ⓘ</Text>
-          <Text style={styles.bannerText}>
-            Notifications are updated in real-time
-          </Text>
+      {showNewNotificationMessage && (
+        <View style={styles.messageContainer} pointerEvents="none">
+          <View style={styles.messagePill}>
+            <Text style={styles.messageText}>New notification received</Text>
+          </View>
         </View>
-      </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -334,37 +358,30 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 18,
   },
-  bannerContainer: {
+  messageContainer: {
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingTop: 8,
     paddingBottom: 10,
     backgroundColor: '#EDF4FF',
   },
-  bannerPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  messagePill: {
     backgroundColor: '#FFFFFF',
     paddingHorizontal: 14,
-    paddingVertical: 9,
+    paddingVertical: 8,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#DCE8F8',
+    borderColor: '#D8D7FF',
     shadowColor: '#1E3A8A',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
     shadowRadius: 4,
     elevation: 2,
   },
-  bannerIcon: {
+  messageText: {
     fontSize: 12,
-    color: '#66758C',
-    marginRight: 6,
-  },
-  bannerText: {
-    fontSize: 11,
-    fontWeight: '500',
-    color: '#66758C',
+    fontWeight: '600',
+    color: '#5148D8',
     textAlign: 'center',
   },
 });

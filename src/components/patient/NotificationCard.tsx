@@ -105,9 +105,16 @@ export function NotificationCard({
         onPress={() => onDelete(notification)}
         accessibilityRole="button"
         accessibilityLabel={`Delete notification: ${title}`}
-        hitSlop={6}
+        hitSlop={4}
       >
-        <Text style={styles.deleteText}>Delete</Text>
+        <View style={styles.deleteIcon} accessible={false}>
+          <View style={styles.deleteHandle} />
+          <View style={styles.deleteLid} />
+          <View style={styles.deleteCan}>
+            <View style={styles.deleteCanLine} />
+            <View style={styles.deleteCanLine} />
+          </View>
+        </View>
       </Pressable>
     </View>
   );
@@ -209,19 +216,53 @@ const styles = StyleSheet.create({
     color: '#5148D8',
   },
   deleteButton: {
-    minHeight: 32,
+    width: 40,
+    height: 40,
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: 8,
-    paddingHorizontal: 7,
-    borderRadius: 8,
-    backgroundColor: '#FEF2F2',
+    borderRadius: 12,
+    backgroundColor: '#FFF8F8',
     borderWidth: 1,
-    borderColor: '#FECACA',
+    borderColor: '#F8E5E5',
   },
-  deleteText: {
-    color: '#B91C1C',
-    fontSize: 10,
-    fontWeight: '700',
+  deleteIcon: {
+    width: 18,
+    height: 19,
+    alignItems: 'center',
+  },
+  deleteHandle: {
+    width: 6,
+    height: 2,
+    borderTopLeftRadius: 1,
+    borderTopRightRadius: 1,
+    backgroundColor: '#B86B6B',
+  },
+  deleteLid: {
+    width: 16,
+    height: 1.5,
+    marginTop: 2,
+    borderRadius: 1,
+    backgroundColor: '#B86B6B',
+  },
+  deleteCan: {
+    width: 12,
+    height: 11,
+    marginTop: 1,
+    borderWidth: 1.5,
+    borderTopWidth: 0,
+    borderBottomLeftRadius: 3,
+    borderBottomRightRadius: 3,
+    borderColor: '#B86B6B',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 3,
+  },
+  deleteCanLine: {
+    width: 1,
+    height: 6,
+    marginTop: 2,
+    borderRadius: 1,
+    backgroundColor: '#B86B6B',
   },
 });
