@@ -33,6 +33,7 @@ export interface Doctor {
   maxTokens: number;
   consultingSlots: string[];
   consultingDays: string[];
+  consultingStartDate?: string;
   active: boolean;
   imageUrl?: string;
 }
@@ -62,7 +63,7 @@ export interface Appointment {
   date: string;
   time: string;
   endTime: string;
-  status: 'upcoming' | 'completed' | 'cancelled';
+  status: 'upcoming' | 'arrived' | 'completed' | 'cancelled';
   tokenNumber: number;
   bookingType: 'Online App Booking' | 'Counter Pre-booked';
   patientCode: string;
@@ -96,11 +97,93 @@ export interface Delay {
 let localDoctors: Doctor[] = [...INITIAL_DOCTORS];
 let localClinicWings: ClinicWing[] = [...INITIAL_CLINIC_WINGS];
 let localAppointments: Appointment[] = getInitialAppointments();
+let demoAppointments: Appointment[] = getInitialAppointments();
 let localQueues: Queue[] = getInitialQueues();
+let demoQueues: Queue[] = getInitialQueues();
 let localDelays: Delay[] = [...INITIAL_DELAYS];
 
+const doctorNameKey = (name: string): string => name.trim().toLocaleLowerCase();
+
+const mergeDoctorsWithRoster = (persistedDoctors: Doctor[]): Doctor[] => {
+  const persistedByName = new Map(
+    persistedDoctors.map((doctor) => [doctorNameKey(doctor.name), doctor])
+  );
+  const rosterNames = new Set(INITIAL_DOCTORS.map((doctor) => doctorNameKey(doctor.name)));
+  const roster = INITIAL_DOCTORS.map(
+    (doctor) => persistedByName.get(doctorNameKey(doctor.name)) ?? doctor
+  );
+  const additional = persistedDoctors.filter(
+    (doctor) => !rosterNames.has(doctorNameKey(doctor.name))
+  );
+  return [...roster, ...additional];
+};
+
+const getDoctorIdByName = (name: string): string | undefined =>
+  localDoctors.find((doctor) => doctorNameKey(doctor.name) === doctorNameKey(name))?.id;
+
+const mergeAppointmentsWithRoster = (persistedAppointments: Appointment[]): Appointment[] => {
+  const merged = getInitialAppointments().map((appointment) => ({
+    ...appointment,
+    doctorId: getDoctorIdByName(appointment.doctorName) ?? appointment.doctorId,
+  }));
+  const appointmentIndex = new Map(
+    merged.map((appointment, index) => [
+      `${doctorNameKey(appointment.doctorName)}|${appointment.date}|${appointment.tokenNumber}`,
+      index,
+    ])
+  );
+
+  persistedAppointments.forEach((appointment) => {
+    const key = `${doctorNameKey(appointment.doctorName)}|${appointment.date}|${appointment.tokenNumber}`;
+    const index = appointmentIndex.get(key);
+    const linkedAppointment = {
+      ...appointment,
+      doctorId: getDoctorIdByName(appointment.doctorName) ?? appointment.doctorId,
+    };
+    if (index === undefined) {
+      appointmentIndex.set(key, merged.length);
+      merged.push(linkedAppointment);
+    } else {
+      merged[index] = linkedAppointment;
+    }
+  });
+
+  return merged;
+};
+
+const mergeQueuesWithRoster = (date: string, persistedQueues: Queue[]): Queue[] => {
+  const merged = getInitialQueues().filter((queue) => queue.date === date).map((queue) => {
+    const doctor = INITIAL_DOCTORS.find((item) => item.id === queue.doctorId);
+    return {
+      ...queue,
+      doctorId: doctor ? getDoctorIdByName(doctor.name) ?? queue.doctorId : queue.doctorId,
+    };
+  });
+  const doctorById = new Map(localDoctors.map((doctor) => [doctor.id, doctor]));
+
+  persistedQueues.forEach((queue) => {
+    const doctorName = doctorById.get(queue.doctorId)?.name;
+    const index = doctorName
+      ? merged.findIndex((item) =>
+          INITIAL_DOCTORS.some(
+            (doctor) => doctorNameKey(doctor.name) === doctorNameKey(doctorName) &&
+              item.doctorId === (getDoctorIdByName(doctor.name) ?? doctor.id)
+          )
+        )
+      : merged.findIndex((item) => item.doctorId === queue.doctorId);
+    const linkedQueue = { ...queue, date };
+    if (index === -1) merged.push(linkedQueue);
+    else merged[index] = linkedQueue;
+  });
+
+  return merged;
+};
+
 const doctorsListeners = new Set<(doctors: Doctor[]) => void>();
+const clinicWingListeners = new Set<(wings: ClinicWing[]) => void>();
 const appointmentsListeners = new Set<(appointments: Appointment[]) => void>();
+const demoAppointmentListeners = new Set<(appointments: Appointment[]) => void>();
+const demoQueueListeners = new Set<(queues: Queue[]) => void>();
 const queuesListeners = new Map<string, Set<(queues: Queue[]) => void>>();
 
 function notifyDoctors() {
@@ -114,6 +197,11 @@ function notifyDoctors() {
   });
 }
 
+function notifyClinicWings() {
+  const copy = [...localClinicWings];
+  clinicWingListeners.forEach((cb) => cb(copy));
+}
+
 function notifyAppointments() {
   const copy = [...localAppointments];
   appointmentsListeners.forEach((cb) => {
@@ -123,6 +211,16 @@ function notifyAppointments() {
       console.warn('Appointments listener error:', e);
     }
   });
+}
+
+function notifyDemoAppointments() {
+  const copy = [...demoAppointments];
+  demoAppointmentListeners.forEach((cb) => cb(copy));
+}
+
+function notifyDemoQueues() {
+  const copy = [...demoQueues];
+  demoQueueListeners.forEach((cb) => cb(copy));
 }
 
 function notifyQueues(date: string) {
@@ -145,7 +243,9 @@ export const getDoctors = async (): Promise<Doctor[]> => {
   try {
     const snap = await getDocs(collection(db, 'doctors'));
     if (!snap.empty) {
-      const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Doctor));
+      const docs = mergeDoctorsWithRoster(
+        snap.docs.map((d) => ({ id: d.id, ...d.data() } as Doctor))
+      );
       localDoctors = docs;
       return docs;
     }
@@ -179,6 +279,30 @@ export const addDoctor = async (doctor: Omit<Doctor, 'id'>): Promise<string> => 
   try {
     const ref = await addDoc(collection(db, 'doctors'), doctor);
     newDoctor.id = ref.id;
+    const queueIndex = localQueues.findIndex((queue) => queue.id === newQueue.id);
+    if (queueIndex >= 0) {
+      newQueue.doctorId = ref.id;
+      localQueues[queueIndex] = newQueue;
+    }
+    notifyDoctors();
+    notifyQueues(today);
+
+    try {
+      const queueRef = await addDoc(collection(db, 'queues'), {
+        doctorId: ref.id,
+        date: today,
+        currentToken: 0,
+        nextTokenNumber: 1,
+        nextPatientName: '',
+        status: 'upcoming',
+        delayMinutes: 0,
+        updatedAt: serverTimestamp(),
+      });
+      newQueue.id = queueRef.id;
+      notifyQueues(today);
+    } catch (queueError) {
+      console.warn('Firestore addDoctor queue creation failed, queue is available locally', queueError);
+    }
     return ref.id;
   } catch (e) {
     console.warn('Firestore addDoctor offline, saved to local store', e);
@@ -187,13 +311,57 @@ export const addDoctor = async (doctor: Omit<Doctor, 'id'>): Promise<string> => 
 };
 
 export const updateDoctor = async (id: string, data: Partial<Doctor>): Promise<void> => {
+  const previousDoctor = localDoctors.find((doctor) => doctor.id === id);
   localDoctors = localDoctors.map((d) => (d.id === id ? { ...d, ...data } : d));
+  const updatedName = data.name ?? previousDoctor?.name;
+  const updatedDepartment = data.department ?? previousDoctor?.department;
+  const isLinkedAppointment = (appointment: Appointment) =>
+    appointment.doctorId === id ||
+    (!!previousDoctor &&
+      doctorNameKey(appointment.doctorName) === doctorNameKey(previousDoctor.name));
+  localAppointments = localAppointments.map((appointment) =>
+    isLinkedAppointment(appointment)
+      ? {
+          ...appointment,
+          ...(updatedName ? { doctorName: updatedName } : {}),
+          ...(updatedDepartment ? { department: updatedDepartment } : {}),
+        }
+      : appointment
+  );
+  demoAppointments = demoAppointments.map((appointment) =>
+    isLinkedAppointment(appointment)
+      ? {
+          ...appointment,
+          ...(updatedName ? { doctorName: updatedName } : {}),
+          ...(updatedDepartment ? { department: updatedDepartment } : {}),
+        }
+      : appointment
+  );
   notifyDoctors();
+  notifyAppointments();
+  notifyDemoAppointments();
 
   try {
     await updateDoc(doc(db, 'doctors', id), data);
   } catch (e) {
     console.warn('Firestore updateDoctor offline, updated in local store', e);
+  }
+
+  if (updatedName || updatedDepartment) {
+    try {
+      const appointmentSnapshot = await getDocs(
+        query(collection(db, 'appointments'), where('doctorId', '==', id))
+      );
+      await Promise.all(appointmentSnapshot.docs.map((appointmentDoc) => updateDoc(
+        appointmentDoc.ref,
+        {
+          ...(updatedName ? { doctorName: updatedName } : {}),
+          ...(updatedDepartment ? { department: updatedDepartment } : {}),
+        }
+      )));
+    } catch (e) {
+      console.warn('Firestore linked appointment sync failed, updated locally', e);
+    }
   }
 };
 
@@ -220,9 +388,12 @@ export const subscribeDoctors = (
     const q = query(collection(db, 'doctors'), where('active', '==', true));
     unsubFirestore = onSnapshot(
       q,
+      { includeMetadataChanges: true },
       (snap) => {
-        if (!snap.empty) {
-          localDoctors = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Doctor));
+        if (!snap.empty || !snap.metadata.fromCache) {
+          localDoctors = mergeDoctorsWithRoster(
+            snap.docs.map((d) => ({ id: d.id, ...d.data() } as Doctor))
+          );
           callback([...localDoctors]);
         }
       },
@@ -256,10 +427,44 @@ export const getClinicWings = async (): Promise<ClinicWing[]> => {
   return [...localClinicWings];
 };
 
+export const subscribeClinicWings = (
+  callback: (wings: ClinicWing[]) => void
+): (() => void) => {
+  callback([...localClinicWings]);
+  clinicWingListeners.add(callback);
+
+  let unsubFirestore: (() => void) | undefined;
+  try {
+    unsubFirestore = onSnapshot(
+      collection(db, 'clinicWings'),
+      { includeMetadataChanges: true },
+      (snap) => {
+        if (!snap.empty) {
+          localClinicWings = snap.docs.map((d) => ({ id: d.id, ...d.data() } as ClinicWing));
+          callback([...localClinicWings]);
+        } else if (!snap.metadata.fromCache && localClinicWings.length === 0) {
+          callback([]);
+        }
+      },
+      (err) => {
+        console.warn('Firestore subscribeClinicWings error, using local data', err.message);
+      }
+    );
+  } catch (err) {
+    console.warn('Firestore subscribeClinicWings init error', err);
+  }
+
+  return () => {
+    clinicWingListeners.delete(callback);
+    if (unsubFirestore) unsubFirestore();
+  };
+};
+
 export const addClinicWing = async (wing: Omit<ClinicWing, 'id'>): Promise<string> => {
   const newId = `wing-${Date.now()}`;
   const newWing: ClinicWing = { id: newId, ...wing };
   localClinicWings = [...localClinicWings, newWing];
+  notifyClinicWings();
 
   try {
     const ref = await addDoc(collection(db, 'clinicWings'), {
@@ -267,6 +472,7 @@ export const addClinicWing = async (wing: Omit<ClinicWing, 'id'>): Promise<strin
       createdAt: serverTimestamp(),
     });
     newWing.id = ref.id;
+    notifyClinicWings();
     return ref.id;
   } catch (e) {
     console.warn('Firestore addClinicWing offline, saved locally', e);
@@ -276,6 +482,7 @@ export const addClinicWing = async (wing: Omit<ClinicWing, 'id'>): Promise<strin
 
 export const updateClinicWing = async (id: string, data: Partial<ClinicWing>): Promise<void> => {
   localClinicWings = localClinicWings.map((w) => (w.id === id ? { ...w, ...data } : w));
+  notifyClinicWings();
   try {
     await updateDoc(doc(db, 'clinicWings', id), data);
   } catch (e) {
@@ -290,7 +497,9 @@ export const getAppointments = async (): Promise<Appointment[]> => {
     const q = query(collection(db, 'appointments'), orderBy('date', 'asc'));
     const snap = await getDocs(q);
     if (!snap.empty) {
-      const appts = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Appointment));
+      const appts = mergeAppointmentsWithRoster(
+        snap.docs.map((d) => ({ id: d.id, ...d.data() } as Appointment))
+      );
       localAppointments = appts;
       return appts;
     }
@@ -304,6 +513,7 @@ export const updateAppointmentStatus = async (
   id: string,
   status: Appointment['status']
 ): Promise<void> => {
+  const appointment = localAppointments.find((item) => item.id === id);
   localAppointments = localAppointments.map((a) =>
     a.id === id ? { ...a, status } : a
   );
@@ -311,6 +521,69 @@ export const updateAppointmentStatus = async (
 
   try {
     await updateDoc(doc(db, 'appointments', id), { status });
+    if (status === 'completed' && appointment?.date === getTodayDateString()) {
+      const queueIndex = localQueues.findIndex(
+        (queue) =>
+          queue.doctorId === appointment.doctorId &&
+          queue.date === appointment.date
+      );
+      const localQueue = queueIndex >= 0 ? localQueues[queueIndex] : undefined;
+      const currentToken = Math.max(
+        localQueue?.currentToken ?? 0,
+        appointment.tokenNumber
+      );
+      const nextTokenNumber = currentToken + 1;
+      const nextAppointment = localAppointments.find(
+        (item) =>
+          item.doctorId === appointment.doctorId &&
+          item.date === appointment.date &&
+          item.tokenNumber === nextTokenNumber &&
+          (item.status === 'upcoming' || item.status === 'arrived')
+      );
+      if (localQueue && queueIndex >= 0) {
+        localQueues[queueIndex] = {
+          ...localQueue,
+          currentToken,
+          nextTokenNumber,
+          nextPatientName: nextAppointment?.patientName ?? '',
+        };
+        notifyQueues(appointment.date);
+      }
+
+      const queueQuery = query(
+        collection(db, 'queues'),
+        where('doctorId', '==', appointment.doctorId),
+        where('date', '==', appointment.date)
+      );
+      const queueSnapshot = await getDocs(queueQuery);
+      if (!queueSnapshot.empty) {
+        const persistedCurrentToken = Math.max(
+          Number(queueSnapshot.docs[0].data().currentToken ?? 0),
+          currentToken
+        );
+        await updateDoc(queueSnapshot.docs[0].ref, {
+          currentToken: persistedCurrentToken,
+          nextTokenNumber: persistedCurrentToken + 1,
+          nextPatientName: nextAppointment?.patientName ?? '',
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        const queueData: Omit<Queue, 'id'> = {
+          doctorId: appointment.doctorId,
+          date: appointment.date,
+          currentToken,
+          nextTokenNumber: currentToken + 1,
+          nextPatientName: nextAppointment?.patientName ?? '',
+          status: 'active',
+        };
+        const createdQueue = await addDoc(collection(db, 'queues'), {
+          ...queueData,
+          updatedAt: serverTimestamp(),
+        });
+        localQueues = [...localQueues, { id: createdQueue.id, ...queueData }];
+        notifyQueues(appointment.date);
+      }
+    }
   } catch (e) {
     console.warn('Firestore updateAppointmentStatus offline, updated locally', e);
   }
@@ -328,9 +601,12 @@ export const subscribeAppointments = (
     const q = query(collection(db, 'appointments'), orderBy('date', 'asc'));
     unsubFirestore = onSnapshot(
       q,
+      { includeMetadataChanges: true },
       (snap) => {
-        if (!snap.empty) {
-          localAppointments = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Appointment));
+        if (!snap.empty || !snap.metadata.fromCache) {
+          localAppointments = mergeAppointmentsWithRoster(
+            snap.docs.map((d) => ({ id: d.id, ...d.data() } as Appointment))
+          );
           callback([...localAppointments]);
         }
       },
@@ -346,6 +622,75 @@ export const subscribeAppointments = (
     appointmentsListeners.delete(callback);
     if (unsubFirestore) unsubFirestore();
   };
+};
+
+export const subscribeDemoAppointments = (
+  callback: (appointments: Appointment[]) => void
+): (() => void) => {
+  callback([...demoAppointments]);
+  demoAppointmentListeners.add(callback);
+  return () => demoAppointmentListeners.delete(callback);
+};
+
+export const updateDemoAppointmentStatus = (
+  id: string,
+  status: Appointment['status']
+): void => {
+  const appointment = demoAppointments.find((item) => item.id === id);
+  if (!appointment) {
+    console.warn(`Demo appointment not found: ${id}`);
+    return;
+  }
+
+  demoAppointments = demoAppointments.map((item) =>
+    item.id === id ? { ...item, status } : item
+  );
+
+  if (appointment.date === getTodayDateString()) {
+    const queueIndex = demoQueues.findIndex(
+      (queue) => queue.doctorId === appointment.doctorId && queue.date === appointment.date
+    );
+    if (queueIndex >= 0) {
+      const currentQueue = demoQueues[queueIndex];
+      const currentToken =
+        status === 'completed'
+          ? Math.max(currentQueue.currentToken, appointment.tokenNumber)
+          : currentQueue.currentToken;
+      const nextTokenNumber = currentToken + 1;
+      const nextAppointment = demoAppointments.find(
+        (item) =>
+          item.doctorId === appointment.doctorId &&
+          item.date === appointment.date &&
+          item.tokenNumber === nextTokenNumber &&
+          (item.status === 'upcoming' || item.status === 'arrived')
+      );
+      demoQueues[queueIndex] = {
+        ...currentQueue,
+        currentToken,
+        nextTokenNumber,
+        nextPatientName: nextAppointment?.patientName ?? '',
+      };
+      notifyDemoQueues();
+    }
+  }
+
+  notifyDemoAppointments();
+};
+
+export const subscribeDemoQueues = (callback: (queues: Queue[]) => void): (() => void) => {
+  callback([...demoQueues]);
+  demoQueueListeners.add(callback);
+  return () => demoQueueListeners.delete(callback);
+};
+
+export const updateDemoQueue = (
+  doctorId: string,
+  data: Partial<Queue>
+): void => {
+  demoQueues = demoQueues.map((queue) =>
+    queue.doctorId === doctorId ? { ...queue, ...data } : queue
+  );
+  notifyDemoQueues();
 };
 
 // ── Queues ─────────────────────────────────────────────────────────────────
@@ -439,9 +784,13 @@ export const subscribeQueues = (
     const q = query(collection(db, 'queues'), where('date', '==', date));
     unsubFirestore = onSnapshot(
       q,
+      { includeMetadataChanges: true },
       (snap) => {
-        if (!snap.empty) {
-          const list = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Queue));
+        if (!snap.empty || !snap.metadata.fromCache) {
+          const list = mergeQueuesWithRoster(
+            date,
+            snap.docs.map((d) => ({ id: d.id, ...d.data() } as Queue))
+          );
           // merge with local
           const otherDates = localQueues.filter((q) => q.date !== date);
           localQueues = [...otherDates, ...list];

@@ -13,10 +13,16 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
-import { broadcastDelay, updateQueueStatus, getDoctors } from '@/services/adminService';
+import {
+  broadcastDelay,
+  getDoctors,
+  updateDemoQueue,
+  updateQueueStatus,
+} from '@/services/adminService';
 import type { Doctor } from '@/services/adminService';
+import { getTodayDateString } from '@/services/mockData';
 
-const TODAY = new Date().toISOString().split('T')[0];
+const TODAY = getTodayDateString();
 
 const DELAY_OPTIONS = [5, 10, 15, 20, 30, 45, 60];
 
@@ -27,15 +33,32 @@ const MESSAGE_TEMPLATES = [
   'Technical issue causing a brief delay.',
 ];
 
-export default function BroadcastDelay() {
+type BroadcastDelayProps = {
+  doctor?: Doctor;
+  doctorId?: string;
+  doctorName?: string;
+  isDemo?: boolean;
+  onDone?: () => void;
+};
+
+export default function BroadcastDelay({
+  doctor: initialDoctor,
+  doctorId: initialDoctorId,
+  doctorName: initialDoctorName,
+  isDemo,
+  onDone,
+}: BroadcastDelayProps) {
   const params = useLocalSearchParams<{
     doctorId?: string;
     doctorName?: string;
+    isDemo?: string;
   }>();
+  const doctorId = initialDoctor?.id || initialDoctorId || params.doctorId || '';
+  const doctorName = initialDoctor?.name || initialDoctorName || params.doctorName || '';
 
   const [doctorsList, setDoctorsList] = useState<Doctor[]>([]);
-  const [selectedDocId, setSelectedDocId] = useState<string>(params.doctorId || '');
-  const [selectedDocName, setSelectedDocName] = useState<string>(params.doctorName || '');
+  const [selectedDocId, setSelectedDocId] = useState<string>(doctorId);
+  const [selectedDocName, setSelectedDocName] = useState<string>(doctorName);
   const [showDoctorPicker, setShowDoctorPicker] = useState(false);
 
   const [selectedMinutes, setSelectedMinutes] = useState<number | null>(null);
@@ -46,16 +69,18 @@ export default function BroadcastDelay() {
   React.useEffect(() => {
     getDoctors().then((docs) => {
       setDoctorsList(docs);
-      if (!params.doctorId && docs.length > 0) {
+      if (!doctorId && docs.length > 0) {
         setSelectedDocId(docs[0].id || '');
         setSelectedDocName(docs[0].name);
       }
     });
-  }, [params.doctorId]);
+  }, [doctorId]);
 
-  const activeDocId = selectedDocId || params.doctorId || (doctorsList[0]?.id ?? '');
-  const activeDocName = selectedDocName || params.doctorName || (doctorsList[0]?.name ?? 'Doctor');
-  const activeDoctor = doctorsList.find((d) => d.id === activeDocId) || doctorsList[0];
+  const activeDocId = selectedDocId || doctorId || (doctorsList[0]?.id ?? '');
+  const activeDocName = selectedDocName || doctorName || (doctorsList[0]?.name ?? 'Doctor');
+  const activeDoctor =
+    doctorsList.find((d) => d.id === activeDocId) || initialDoctor || doctorsList[0];
+  const exitBroadcast = () => (onDone ? onDone() : router.back());
 
   const handleTemplateSelect = (msg: string) => {
     setCustomMessage(msg);
@@ -78,17 +103,22 @@ export default function BroadcastDelay() {
 
     setSaving(true);
     try {
-      await Promise.all([
-        broadcastDelay({
-          doctorId: activeDocId,
-          doctorName: activeDocName,
-          message,
-          minutes: selectedMinutes,
-        }),
-        updateQueueStatus(activeDocId, TODAY, 'delayed', selectedMinutes),
-      ]);
+      await broadcastDelay({
+        doctorId: activeDocId,
+        doctorName: activeDocName,
+        message,
+        minutes: selectedMinutes,
+      });
+      if (isDemo ?? params.isDemo === 'true') {
+        updateDemoQueue(activeDocId, {
+          status: 'delayed',
+          delayMinutes: selectedMinutes,
+        });
+      } else {
+        await updateQueueStatus(activeDocId, TODAY, 'delayed', selectedMinutes);
+      }
       setSent(true);
-    } catch (e) {
+    } catch {
       Alert.alert('Error', 'Failed to broadcast delay. Please try again.');
     } finally {
       setSaving(false);
@@ -124,7 +154,7 @@ export default function BroadcastDelay() {
           </View>
           <TouchableOpacity
             style={styles.doneBtn}
-            onPress={() => router.back()}
+            onPress={exitBroadcast}
           >
             <Text style={styles.doneBtnText}>Done</Text>
           </TouchableOpacity>
@@ -151,7 +181,7 @@ export default function BroadcastDelay() {
       >
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <TouchableOpacity           onPress={exitBroadcast} style={styles.backBtn}>
             <Text style={styles.backText}>‹ Back</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Broadcast Delay</Text>

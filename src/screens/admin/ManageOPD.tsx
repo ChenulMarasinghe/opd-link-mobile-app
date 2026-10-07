@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -12,11 +12,17 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
-import { addDoctor, getClinicWings, getDoctors } from '@/services/adminService';
+import {
+  addClinicWing,
+  addDoctor,
+  subscribeClinicWings,
+  subscribeDoctors,
+  updateClinicWing,
+  updateDoctor,
+} from '@/services/adminService';
 import type { Doctor, ClinicWing } from '@/services/adminService';
+import { getTodayDateString, INITIAL_DOCTORS } from '@/services/mockData';
 
-const DEPARTMENTS = ['General OPD', 'Cardiology', 'Dental', 'ENT', 'Orthopedics', 'Neurology'];
 const DAYS = ['M', 'T', 'W', 'T', 'F', 'S'];
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const SLOT_PRESETS = {
@@ -25,35 +31,142 @@ const SLOT_PRESETS = {
   'Full Day': ['08:30 AM - 12:00 PM', '01:00 PM - 05:00 PM'],
 };
 
+function getRoomNumbers(rooms: string): string[] {
+  const range = rooms.match(/(\d+)\s*(?:-|–|to)\s*(\d+)/i);
+  if (range) {
+    const start = Number(range[1]);
+    const end = Number(range[2]);
+    if (end >= start && end - start <= 100) {
+      const width = Math.max(range[1].length, range[2].length);
+      return Array.from({ length: end - start + 1 }, (_, index) =>
+        `Room ${String(start + index).padStart(width, '0')}`
+      );
+    }
+  }
+  return [...new Set(
+    [...rooms.matchAll(/\b(?:room\s*)?(\d{1,4})\b/gi)]
+      .map((match) => `Room ${match[1].padStart(Math.max(2, match[1].length), '0')}`)
+  )];
+}
+
+function isValidDate(value: string): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return false;
+  const [, year, month, day] = match;
+  const date = new Date(Number(year), Number(month) - 1, Number(day));
+  return date.getFullYear() === Number(year) &&
+    date.getMonth() === Number(month) - 1 &&
+    date.getDate() === Number(day);
+}
+
+function getClinicDepartment(clinic: ClinicWing, doctors: Doctor[]): string {
+  const clinicHead = doctors.find((doctor) => doctor.name === clinic.clinicHead);
+  return clinicHead?.department ?? clinic.name;
+}
+
 export default function ManageOPD() {
   const [view, setView] = useState<'main' | 'addDoctor' | 'addWing'>('main');
   const [clinics, setClinics] = useState<ClinicWing[]>([]);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [saving, setSaving] = useState(false);
+  const [editingDoctor, setEditingDoctor] = useState<Doctor | null>(null);
+  const [editingWing, setEditingWing] = useState<ClinicWing | null>(null);
 
   // Add Doctor Form
   const [doctorName, setDoctorName] = useState('');
-  const [department, setDepartment] = useState('General OPD');
-  const [room, setRoom] = useState('');
-  const [maxTokens, setMaxTokens] = useState('');
+  const [hospital, setHospital] = useState('Colombo National Hospital');
+  const [selectedDepartment, setSelectedDepartment] = useState('General OPD');
+  const [room, setRoom] = useState(INITIAL_DOCTORS[0]?.room ?? '');
+  const [maxTokens, setMaxTokens] = useState('40');
+  const [consultingStartDate, setConsultingStartDate] = useState(getTodayDateString());
   const [selectedShift, setSelectedShift] = useState<'Morning' | 'Evening' | 'Full Day'>('Morning');
   const [selectedSlots, setSelectedSlots] = useState<string[]>(SLOT_PRESETS.Morning);
   const [selectedDays, setSelectedDays] = useState<number[]>([0, 1, 2, 3, 4]);
   const [showDeptPicker, setShowDeptPicker] = useState(false);
+  const [showRoomPicker, setShowRoomPicker] = useState(false);
 
   useEffect(() => {
-    loadData();
+    const unsubscribeWings = subscribeClinicWings(setClinics);
+    const unsubscribeDoctors = subscribeDoctors(setDoctors);
+    return () => {
+      unsubscribeWings();
+      unsubscribeDoctors();
+    };
   }, []);
 
-  const loadData = async () => {
-    try {
-      const [wings, docs] = await Promise.all([getClinicWings(), getDoctors()]);
-      setClinics(wings);
-      setDoctors(docs);
-    } catch (e) {
-      console.error(e);
+  const rosterDoctors = useMemo(
+    () => (doctors.length > 0 ? doctors : INITIAL_DOCTORS),
+    [doctors]
+  );
+  const activeClinics = useMemo(
+    () => clinics.filter((clinic) => clinic.active),
+    [clinics]
+  );
+  const liveDepartments = useMemo(() => {
+    const departmentDoctors = new Map<string, Doctor[]>();
+    rosterDoctors.filter((doctor) => doctor.active).forEach((doctor) => {
+      const members = departmentDoctors.get(doctor.department) ?? [];
+      members.push(doctor);
+      departmentDoctors.set(doctor.department, members);
+    });
+    return [...departmentDoctors.entries()].map(([name, members]) => {
+      const clinic = activeClinics.find((item) =>
+        item.clinicHead
+          ? members.some((doctor) =>
+              doctor.name.trim().toLowerCase() === item.clinicHead?.trim().toLowerCase()
+            )
+          : getClinicDepartment(item, rosterDoctors).toLowerCase() === name.toLowerCase()
+      );
+      return { name, doctors: members, clinic };
+    });
+  }, [activeClinics, rosterDoctors]);
+  const departmentOptions = useMemo(() => [...new Set([
+    ...rosterDoctors.filter((doctor) => doctor.active).map((doctor) => doctor.department),
+    ...activeClinics.map((clinic) => getClinicDepartment(clinic, rosterDoctors)),
+    ...(editingDoctor ? [editingDoctor.department] : []),
+  ])], [activeClinics, editingDoctor, rosterDoctors]);
+  const department = departmentOptions.includes(selectedDepartment)
+    ? selectedDepartment
+    : departmentOptions[0] ?? '';
+  const selectedClinic = activeClinics.find(
+    (clinic) => getClinicDepartment(clinic, rosterDoctors) === department
+  );
+  const roomOptions = useMemo(() => {
+    const allocatedRooms = selectedClinic ? getRoomNumbers(selectedClinic.rooms) : [];
+    const rooms = allocatedRooms.length > 0 ? allocatedRooms : [...new Set(
+      rosterDoctors
+        .filter((doctor) => doctor.active && doctor.department === department)
+        .map((doctor) => doctor.room)
+    )];
+    if (editingDoctor && editingDoctor.department === department && !rooms.includes(editingDoctor.room)) {
+      return [...rooms, editingDoctor.room];
     }
-  };
+    return rooms;
+  }, [department, editingDoctor, rosterDoctors, selectedClinic]);
+  const maxTokenLimit = useMemo(() => selectedClinic?.maxDailyTokens ??
+    Math.max(
+      0,
+      ...rosterDoctors
+        .filter((doctor) => doctor.active && doctor.department === department)
+        .map((doctor) => doctor.maxTokens),
+      editingDoctor && editingDoctor.department === department ? editingDoctor.maxTokens : 0
+    ), [department, editingDoctor, rosterDoctors, selectedClinic]);
+  const selectedRoom = roomOptions.includes(room) ? room : roomOptions[0] ?? '';
+  const availableDayIndexes = useMemo(() => {
+    const departmentDays = selectedClinic?.operatingDays?.length
+      ? selectedClinic.operatingDays
+      : rosterDoctors
+          .filter((doctor) => doctor.active && doctor.department === department)
+          .flatMap((doctor) => doctor.consultingDays);
+    const days = departmentDays.length > 0
+      ? departmentDays
+      : editingDoctor && editingDoctor.department === department
+        ? editingDoctor.consultingDays
+        : [];
+    return [...new Set(days
+      .map((day) => DAY_LABELS.indexOf(day))
+      .filter((index) => index >= 0))];
+  }, [department, editingDoctor, rosterDoctors, selectedClinic]);
 
   const handleShiftSelect = (shift: 'Morning' | 'Evening' | 'Full Day') => {
     setSelectedShift(shift);
@@ -61,63 +174,186 @@ export default function ManageOPD() {
   };
 
   const toggleDay = (idx: number) => {
+    if (!availableDayIndexes.includes(idx)) return;
     setSelectedDays((prev) =>
       prev.includes(idx) ? prev.filter((d) => d !== idx) : [...prev, idx]
     );
   };
 
+  const handleDepartmentSelect = (value: string) => {
+    setSelectedDepartment(value);
+    const clinic = activeClinics.find((item) => getClinicDepartment(item, rosterDoctors) === value);
+    const assignedRooms = clinic ? getRoomNumbers(clinic.rooms) : [];
+    const availableRooms = assignedRooms.length > 0
+      ? assignedRooms
+      : [...new Set(
+          rosterDoctors
+            .filter((doctor) => doctor.active && doctor.department === value)
+            .map((doctor) => doctor.room)
+        )];
+    const tokenLimit = clinic?.maxDailyTokens ??
+      Math.max(
+        0,
+        ...rosterDoctors
+          .filter((doctor) => doctor.active && doctor.department === value)
+          .map((doctor) => doctor.maxTokens)
+      );
+    setRoom(availableRooms[0] ?? '');
+    setMaxTokens(tokenLimit > 0 ? String(Math.min(40, tokenLimit)) : '');
+    const dayOptions = clinic?.operatingDays?.length
+      ? clinic.operatingDays
+      : rosterDoctors
+          .filter((doctor) => doctor.active && doctor.department === value)
+          .flatMap((doctor) => doctor.consultingDays);
+    const allowedDays = [...new Set(dayOptions
+      .map((day) => DAY_LABELS.indexOf(day))
+      .filter((index) => index >= 0))];
+    const weekdays = [0, 1, 2, 3, 4].filter((day) => allowedDays.includes(day));
+    setSelectedDays(weekdays.length > 0 ? weekdays : allowedDays);
+    setShowRoomPicker(false);
+  };
+
+  const startAddingDoctor = () => {
+    const initialDepartment = departmentOptions[0] ?? '';
+    setEditingDoctor(null);
+    setDoctorName('');
+    setHospital('Colombo National Hospital');
+    setSelectedDepartment(initialDepartment);
+    handleDepartmentSelect(initialDepartment);
+    setMaxTokens('40');
+    setConsultingStartDate(getTodayDateString());
+    setSelectedShift('Morning');
+    setSelectedSlots(SLOT_PRESETS.Morning);
+    setSelectedDays([0, 1, 2, 3, 4]);
+    setView('addDoctor');
+  };
+
+  const startEditingDoctor = useCallback((doctor: Doctor) => {
+    setEditingDoctor(doctor);
+    setDoctorName(doctor.name);
+    setHospital(doctor.hospital ?? '');
+    setSelectedDepartment(doctor.department);
+    setRoom(doctor.room);
+    setMaxTokens(String(doctor.maxTokens));
+    setConsultingStartDate(doctor.consultingStartDate ?? getTodayDateString());
+    setSelectedSlots(doctor.consultingSlots ?? []);
+    setSelectedDays((doctor.consultingDays ?? [])
+      .map((day) => DAY_LABELS.indexOf(day))
+      .filter((index) => index >= 0));
+    setSelectedShift(
+      doctor.consultingSlots?.some((slot) => slot.toLowerCase().includes('pm'))
+        ? 'Evening'
+        : 'Morning'
+    );
+    setView('addDoctor');
+  }, []);
+
+  const startEditingWing = (wing: ClinicWing) => {
+    setEditingWing(wing);
+    setView('addWing');
+  };
+
+  const closeDoctorForm = () => {
+    setEditingDoctor(null);
+    setView('main');
+  };
+
   const handleSaveDoctor = async () => {
-    if (!doctorName.trim() || !room.trim() || !maxTokens.trim()) {
-      Alert.alert('Validation', 'Please fill in all required fields');
+    const parsedMaxTokens = Number(maxTokens);
+    if (doctorName.trim().length < 3) {
+      Alert.alert('Validation', 'Enter the doctor’s name.');
+      return;
+    }
+    if (!hospital.trim()) {
+      Alert.alert('Validation', 'Enter the hospital name.');
+      return;
+    }
+    if (rosterDoctors.some(
+      (doctor) => doctor.id !== editingDoctor?.id &&
+        doctor.name.trim().toLowerCase() === doctorName.trim().toLowerCase()
+    )) {
+      Alert.alert('Validation', 'A doctor with this name already exists.');
+      return;
+    }
+    if (!departmentOptions.includes(department)) {
+      Alert.alert('Validation', 'Select an available department.');
+      return;
+    }
+    if (!roomOptions.includes(selectedRoom)) {
+      Alert.alert('Validation', 'Select a room allocated to this department.');
+      return;
+    }
+    if (!Number.isInteger(parsedMaxTokens) || parsedMaxTokens < 1 || parsedMaxTokens > maxTokenLimit) {
+      Alert.alert('Validation', `Maximum tokens must be a whole number from 1 to ${maxTokenLimit}.`);
+      return;
+    }
+    if (!isValidDate(consultingStartDate)) {
+      Alert.alert('Validation', 'Enter a valid consulting start date in YYYY-MM-DD format.');
+      return;
+    }
+    if (
+      consultingStartDate < getTodayDateString() &&
+      consultingStartDate !== editingDoctor?.consultingStartDate
+    ) {
+      Alert.alert('Validation', 'Consulting start date cannot be in the past.');
+      return;
+    }
+    if (
+      selectedDays.length === 0 ||
+      selectedDays.some((day) => !availableDayIndexes.includes(day))
+    ) {
+      Alert.alert('Validation', 'Select at least one valid consulting day for this department.');
+      return;
+    }
+    if (selectedSlots.length === 0) {
+      Alert.alert('Validation', 'Select at least one consulting time slot.');
       return;
     }
     setSaving(true);
     try {
-      await addDoctor({
+      const doctorData = {
         name: doctorName.trim(),
         department,
-        hospital: 'Colombo National Hospital',
-        room: room.trim(),
-        maxTokens: parseInt(maxTokens, 10),
+        hospital: hospital.trim(),
+        room: selectedRoom,
+        maxTokens: parsedMaxTokens,
         consultingSlots: selectedSlots,
         consultingDays: selectedDays.map((i) => DAY_LABELS[i]),
-        active: true,
-      });
-      Alert.alert('Success', `Dr. ${doctorName} has been added successfully!`, [
+        consultingStartDate,
+        active: editingDoctor?.active ?? true,
+      };
+      if (editingDoctor) {
+        if (!editingDoctor.id) {
+          Alert.alert('Error', 'This doctor cannot be edited because its record has no ID.');
+          return;
+        }
+        await updateDoctor(editingDoctor.id, doctorData);
+      } else {
+        await addDoctor(doctorData);
+      }
+      Alert.alert('Success', `Dr. ${doctorName} has been ${editingDoctor ? 'updated' : 'added'} successfully!`, [
         {
           text: 'OK',
           onPress: () => {
+            setEditingDoctor(null);
             setDoctorName('');
+            setHospital('Colombo National Hospital');
             setRoom('');
             setMaxTokens('');
+            setConsultingStartDate(getTodayDateString());
             setSelectedDays([0, 1, 2, 3, 4]);
             setSelectedSlots(SLOT_PRESETS.Morning);
             setView('main');
-            loadData();
           },
         },
       ]);
-    } catch (e) {
+    } catch (error) {
+      console.warn('Failed to save doctor changes', error);
       Alert.alert('Error', 'Failed to save doctor. Please try again.');
     } finally {
       setSaving(false);
     }
   };
-
-  const groupedByDept = DEPARTMENTS.reduce(
-    (acc, dept) => {
-      const deptKey = dept.split(' ')[0]?.toLowerCase() ?? '';
-      const deptClinics = clinics.filter((c) =>
-        c?.name ? c.name.toLowerCase().includes(deptKey) : false
-      );
-      const deptDoctors = doctors.filter((d) => d?.department === dept);
-      if (deptClinics.length > 0 || deptDoctors.length > 0) {
-        acc[dept] = { clinics: deptClinics, doctors: deptDoctors };
-      }
-      return acc;
-    },
-    {} as Record<string, { clinics: ClinicWing[]; doctors: Doctor[] }>
-  );
 
   // ── Add Doctor View ──────────────────────────────────────────────────────
   if (view === 'addDoctor') {
@@ -128,10 +364,10 @@ export default function ManageOPD() {
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
           <View style={styles.pageHeader}>
-            <TouchableOpacity onPress={() => setView('main')} style={styles.backBtn}>
+            <TouchableOpacity onPress={closeDoctorForm} style={styles.backBtn}>
               <Text style={styles.backText}>‹ Back</Text>
             </TouchableOpacity>
-            <Text style={styles.pageTitle}>Add Doctor</Text>
+            <Text style={styles.pageTitle}>{editingDoctor ? 'Edit Doctor' : 'Add Doctor'}</Text>
           </View>
           <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
             <View style={styles.formCard}>
@@ -143,6 +379,14 @@ export default function ManageOPD() {
                 placeholderTextColor="#C4C9D4"
                 value={doctorName}
                 onChangeText={setDoctorName}
+              />
+              <Text style={styles.fieldLabel}>Hospital</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Hospital"
+                placeholderTextColor="#C4C9D4"
+                value={hospital}
+                onChangeText={setHospital}
               />
 
               {/* Department */}
@@ -156,39 +400,60 @@ export default function ManageOPD() {
               </TouchableOpacity>
               {showDeptPicker && (
                 <View style={styles.dropdownMenu}>
-                  {DEPARTMENTS.map((d) => (
+                  {departmentOptions.map((option) => (
                     <TouchableOpacity
-                      key={d}
-                      style={[styles.dropdownItem, d === department && styles.dropdownItemActive]}
+                      key={option}
+                      style={[styles.dropdownItem, option === department && styles.dropdownItemActive]}
                       onPress={() => {
-                        setDepartment(d);
+                        handleDepartmentSelect(option);
                         setShowDeptPicker(false);
                       }}
                     >
-                      <Text
-                        style={[
-                          styles.dropdownItemText,
-                          d === department && styles.dropdownItemTextActive,
-                        ]}
-                      >
-                        {d}
+                      <Text style={[
+                        styles.dropdownItemText,
+                        option === department && styles.dropdownItemTextActive,
+                      ]}>
+                        {option}
                       </Text>
                     </TouchableOpacity>
                   ))}
                 </View>
               )}
-
               {/* Room & Max Tokens */}
               <View style={styles.rowFields}>
                 <View style={styles.halfField}>
                   <Text style={styles.fieldLabel}>Room Number</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="e.g. Room 15"
-                    placeholderTextColor="#C4C9D4"
-                    value={room}
-                    onChangeText={setRoom}
-                  />
+                  <TouchableOpacity
+                    style={[styles.dropdown, roomOptions.length === 0 && styles.disabledDropdown]}
+                    onPress={() => setShowRoomPicker(!showRoomPicker)}
+                    disabled={roomOptions.length === 0}
+                  >
+                    <Text style={styles.dropdownText}>
+                      {selectedRoom || (roomOptions.length ? 'Select room' : 'No rooms allocated')}
+                    </Text>
+                    <Text style={styles.dropdownArrow}>▾</Text>
+                  </TouchableOpacity>
+                  {showRoomPicker && (
+                    <View style={styles.dropdownMenu}>
+                      {roomOptions.map((option) => (
+                        <TouchableOpacity
+                          key={option}
+                          style={[styles.dropdownItem, option === room && styles.dropdownItemActive]}
+                          onPress={() => {
+                            setRoom(option);
+                            setShowRoomPicker(false);
+                          }}
+                        >
+                          <Text style={[
+                            styles.dropdownItemText,
+                            option === room && styles.dropdownItemTextActive,
+                          ]}>
+                            {option}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
                 </View>
                 <View style={styles.halfField}>
                   <Text style={styles.fieldLabel}>Max Tokens</Text>
@@ -200,8 +465,19 @@ export default function ManageOPD() {
                     onChangeText={setMaxTokens}
                     keyboardType="numeric"
                   />
+                  <Text style={styles.helperText}>Department limit: {maxTokenLimit || 'not set'}</Text>
                 </View>
               </View>
+              <Text style={styles.fieldLabel}>Consulting Start Date</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="YYYY-MM-DD"
+                placeholderTextColor="#C4C9D4"
+                value={consultingStartDate}
+                onChangeText={setConsultingStartDate}
+                autoCapitalize="none"
+              />
+              <Text style={styles.helperText}>Use YYYY-MM-DD. Weekly consulting days and time slots apply from this date.</Text>
 
               {/* Consulting Time Slots */}
               <View style={styles.sectionHeaderRow}>
@@ -242,13 +518,19 @@ export default function ManageOPD() {
                 {DAYS.map((day, idx) => (
                   <TouchableOpacity
                     key={`${day}-${idx}`}
-                    style={[styles.dayBtn, selectedDays.includes(idx) && styles.dayBtnActive]}
+                    style={[
+                      styles.dayBtn,
+                      selectedDays.includes(idx) && styles.dayBtnActive,
+                      !availableDayIndexes.includes(idx) && styles.dayBtnDisabled,
+                    ]}
                     onPress={() => toggleDay(idx)}
+                    disabled={!availableDayIndexes.includes(idx)}
                   >
                     <Text
                       style={[
                         styles.dayBtnText,
                         selectedDays.includes(idx) && styles.dayBtnTextActive,
+                        !availableDayIndexes.includes(idx) && styles.dayBtnDisabledText,
                       ]}
                     >
                       {day}
@@ -257,6 +539,7 @@ export default function ManageOPD() {
                       style={[
                         styles.dayBtnSub,
                         selectedDays.includes(idx) && styles.dayBtnSubActive,
+                        !availableDayIndexes.includes(idx) && styles.dayBtnDisabledText,
                       ]}
                     >
                       {DAY_LABELS[idx]}
@@ -264,6 +547,7 @@ export default function ManageOPD() {
                   </TouchableOpacity>
                 ))}
               </View>
+              <Text style={styles.helperText}>Only the selected department’s operating days can be scheduled.</Text>
             </View>
 
             <TouchableOpacity
@@ -274,7 +558,9 @@ export default function ManageOPD() {
               {saving ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text style={styles.saveBtnText}>✓ Save Doctor</Text>
+                <Text style={styles.saveBtnText}>
+                  ✓ {editingDoctor ? 'Save Changes' : 'Save Doctor'}
+                </Text>
               )}
             </TouchableOpacity>
 
@@ -287,7 +573,17 @@ export default function ManageOPD() {
 
   // ── Add Wing View ────────────────────────────────────────────────────────
   if (view === 'addWing') {
-    return <AddClinicWingScreen onBack={() => { setView('main'); loadData(); }} />;
+    return (
+      <AddClinicWingScreen
+        clinics={clinics}
+        wing={editingWing}
+        onBack={() => {
+          setEditingWing(null);
+          setView('main');
+        }}
+        doctors={rosterDoctors}
+      />
+    );
   }
 
   // ── Main View ─────────────────────────────────────────────────────────────
@@ -303,12 +599,18 @@ export default function ManageOPD() {
       <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
         {/* Quick Actions */}
         <View style={styles.quickActionsRow}>
-          <TouchableOpacity style={styles.quickCard} onPress={() => setView('addDoctor')}>
+          <TouchableOpacity style={styles.quickCard} onPress={startAddingDoctor}>
             <Text style={styles.quickCardIcon}>👨‍⚕️</Text>
             <Text style={styles.quickCardTitle}>+ Add Doctor</Text>
             <Text style={styles.quickCardSub}>Assign to department</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.quickCard} onPress={() => setView('addWing')}>
+          <TouchableOpacity
+            style={styles.quickCard}
+            onPress={() => {
+              setEditingWing(null);
+              setView('addWing');
+            }}
+          >
             <Text style={styles.quickCardIcon}>🏥</Text>
             <Text style={styles.quickCardTitle}>+ Add Clinic Wing</Text>
             <Text style={styles.quickCardSub}>Create a new wing</Text>
@@ -339,17 +641,62 @@ export default function ManageOPD() {
             <Text style={styles.dropdownText}>{department}</Text>
             <Text style={styles.dropdownArrow}>▾</Text>
           </TouchableOpacity>
+          {showDeptPicker && (
+            <View style={styles.dropdownMenu}>
+              {departmentOptions.map((option) => (
+                <TouchableOpacity
+                  key={option}
+                  style={[styles.dropdownItem, option === department && styles.dropdownItemActive]}
+                  onPress={() => {
+                    handleDepartmentSelect(option);
+                    setShowDeptPicker(false);
+                  }}
+                >
+                  <Text style={[
+                    styles.dropdownItemText,
+                    option === department && styles.dropdownItemTextActive,
+                  ]}>
+                    {option}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
 
           <View style={styles.rowFields}>
             <View style={styles.halfField}>
               <Text style={styles.fieldLabel}>Room Number</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="e.g. Room 15"
-                placeholderTextColor="#C4C9D4"
-                value={room}
-                onChangeText={setRoom}
-              />
+              <TouchableOpacity
+                style={[styles.dropdown, roomOptions.length === 0 && styles.disabledDropdown]}
+                onPress={() => setShowRoomPicker(!showRoomPicker)}
+                disabled={roomOptions.length === 0}
+              >
+                <Text style={styles.dropdownText}>
+                  {selectedRoom || (roomOptions.length ? 'Select room' : 'No rooms allocated')}
+                </Text>
+                <Text style={styles.dropdownArrow}>▾</Text>
+              </TouchableOpacity>
+              {showRoomPicker && (
+                <View style={styles.dropdownMenu}>
+                  {roomOptions.map((option) => (
+                    <TouchableOpacity
+                      key={option}
+                      style={[styles.dropdownItem, option === room && styles.dropdownItemActive]}
+                      onPress={() => {
+                        setRoom(option);
+                        setShowRoomPicker(false);
+                      }}
+                    >
+                      <Text style={[
+                        styles.dropdownItemText,
+                        option === room && styles.dropdownItemTextActive,
+                      ]}>
+                        {option}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
             </View>
             <View style={styles.halfField}>
               <Text style={styles.fieldLabel}>Max Tokens</Text>
@@ -361,8 +708,19 @@ export default function ManageOPD() {
                 onChangeText={setMaxTokens}
                 keyboardType="numeric"
               />
+              <Text style={styles.helperText}>Department limit: {maxTokenLimit || 'not set'}</Text>
             </View>
           </View>
+          <Text style={styles.fieldLabel}>Consulting Start Date</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="YYYY-MM-DD"
+            placeholderTextColor="#C4C9D4"
+            value={consultingStartDate}
+            onChangeText={setConsultingStartDate}
+            autoCapitalize="none"
+          />
+          <Text style={styles.helperText}>Use YYYY-MM-DD. Weekly consulting days and time slots apply from this date.</Text>
 
           {/* Shift Selection */}
           <View style={styles.sectionHeaderRow}>
@@ -403,13 +761,19 @@ export default function ManageOPD() {
             {DAYS.map((day, idx) => (
               <TouchableOpacity
                 key={`${day}-${idx}`}
-                style={[styles.dayBtn, selectedDays.includes(idx) && styles.dayBtnActive]}
+                style={[
+                  styles.dayBtn,
+                  selectedDays.includes(idx) && styles.dayBtnActive,
+                  !availableDayIndexes.includes(idx) && styles.dayBtnDisabled,
+                ]}
                 onPress={() => toggleDay(idx)}
+                disabled={!availableDayIndexes.includes(idx)}
               >
                 <Text
                   style={[
                     styles.dayBtnText,
                     selectedDays.includes(idx) && styles.dayBtnTextActive,
+                    !availableDayIndexes.includes(idx) && styles.dayBtnDisabledText,
                   ]}
                 >
                   {day}
@@ -418,6 +782,7 @@ export default function ManageOPD() {
                   style={[
                     styles.dayBtnSub,
                     selectedDays.includes(idx) && styles.dayBtnSubActive,
+                    !availableDayIndexes.includes(idx) && styles.dayBtnDisabledText,
                   ]}
                 >
                   {DAY_LABELS[idx]}
@@ -425,6 +790,7 @@ export default function ManageOPD() {
               </TouchableOpacity>
             ))}
           </View>
+          <Text style={styles.helperText}>Only the selected department’s operating days can be scheduled.</Text>
 
           <TouchableOpacity
             style={[styles.saveBtn, saving && styles.saveBtnDisabled]}
@@ -439,9 +805,54 @@ export default function ManageOPD() {
           </TouchableOpacity>
         </View>
 
+        <Text style={styles.activeClinicsTitle}>Live Departments</Text>
+        {liveDepartments.length === 0 ? (
+          <View style={styles.emptySection}>
+            <Text style={styles.emptyText}>No active departments yet</Text>
+          </View>
+        ) : (
+          liveDepartments.map(({ name, doctors: departmentDoctors, clinic }) => (
+            <View key={name} style={styles.liveDepartmentCard}>
+              <View style={styles.liveDepartmentHeader}>
+                <View style={styles.clinicInfo}>
+                  <Text style={styles.clinicName}>{name}</Text>
+                  <Text style={styles.clinicSub}>
+                    {departmentDoctors.length} active {departmentDoctors.length === 1 ? 'doctor' : 'doctors'}
+                    {clinic ? ` • ${clinic.name}` : ''}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.manageBtn}
+                  onPress={() => {
+                    if (clinic) startEditingWing(clinic);
+                    else startEditingDoctor(departmentDoctors[0]);
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Edit ${name} department`}
+                >
+                  <Text style={styles.manageBtnText}>Edit Department</Text>
+                </TouchableOpacity>
+              </View>
+              {departmentDoctors.map((doctor) => (
+                <View key={doctor.id ?? doctor.name} style={styles.liveDepartmentDoctor}>
+                  <Text style={styles.clinicSub}>{doctor.name} • {doctor.room}</Text>
+                  <TouchableOpacity
+                    style={styles.inlineEditBtn}
+                    onPress={() => startEditingDoctor(doctor)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Edit ${doctor.name}`}
+                  >
+                    <Text style={styles.manageBtnText}>Edit Doctor</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          ))
+        )}
+
         {/* Active Clinics */}
-        <Text style={styles.activeClinicsTitle}>Active Clinics</Text>
-        {Object.entries(groupedByDept).length === 0 && clinics.length === 0 ? (
+        <Text style={styles.activeClinicsTitle}>Clinic Wings</Text>
+        {clinics.length === 0 ? (
           <View style={styles.emptySection}>
             <Text style={styles.emptyText}>No active clinics yet</Text>
           </View>
@@ -454,24 +865,56 @@ export default function ManageOPD() {
               <View style={styles.clinicInfo}>
                 <Text style={styles.clinicName}>{clinic.name}</Text>
                 <Text style={styles.clinicSub}>
-                  Rooms {clinic.rooms || '—'} •{' '}
+                  {clinic.rooms || 'No rooms assigned'} •{' '}
                   {
-                    doctors.filter((d) => {
-                      const prefix = (clinic?.name || '').split(' ')[0]?.toLowerCase();
-                      return d?.department && prefix
-                        ? d.department.toLowerCase().includes(prefix)
-                        : false;
-                    }).length
+                    (doctors.length > 0 ? doctors : INITIAL_DOCTORS).filter((doctor) =>
+                      clinic.clinicHead
+                        ? doctor.name === clinic.clinicHead
+                        : doctor.department.toLowerCase() === clinic.name.toLowerCase()
+                    ).length
                   }{' '}
                   Doctors
                 </Text>
               </View>
-              <TouchableOpacity style={styles.manageBtn}>
-                <Text style={styles.manageBtnText}>Manage ›</Text>
+              <TouchableOpacity
+                style={styles.manageBtn}
+                onPress={() => startEditingWing(clinic)}
+                accessibilityRole="button"
+                accessibilityLabel={`Edit ${clinic.name}`}
+              >
+                <Text style={styles.manageBtnText}>Edit ›</Text>
               </TouchableOpacity>
             </View>
           ))
         )}
+
+        <Text style={styles.activeClinicsTitle}>Doctors</Text>
+        {rosterDoctors.filter((doctor) => doctor.active).map((doctor) => (
+          <View key={doctor.id ?? doctor.name} style={styles.doctorRosterCard}>
+            <View style={styles.doctorRosterTop}>
+              <Text style={styles.doctorRosterName}>{doctor.name}</Text>
+              <TouchableOpacity
+                style={styles.manageBtn}
+                onPress={() => startEditingDoctor(doctor)}
+                accessibilityRole="button"
+                accessibilityLabel={`Edit ${doctor.name}`}
+              >
+                <Text style={styles.manageBtnText}>Edit</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.clinicSub}>
+              {doctor.active ? 'Active' : 'Inactive'} • {doctor.maxTokens} tokens
+            </Text>
+            <Text style={styles.clinicSub}>{doctor.department} • {doctor.room}</Text>
+            <Text style={styles.clinicSub}>
+              {(doctor.consultingDays ?? []).join(', ')}
+              {doctor.consultingSlots?.length ? ` • ${doctor.consultingSlots.join(', ')}` : ''}
+            </Text>
+            {doctor.consultingStartDate ? (
+              <Text style={styles.clinicSub}>Schedule starts {doctor.consultingStartDate}</Text>
+            ) : null}
+          </View>
+        ))}
 
         <View style={styles.bottomSpacer} />
       </ScrollView>
@@ -481,18 +924,32 @@ export default function ManageOPD() {
 
 // ── Add Clinic Wing Sub-component ─────────────────────────────────────────
 
-function AddClinicWingScreen({ onBack }: { onBack: () => void }) {
-  const [wingName, setWingName] = useState('');
-  const [building, setBuilding] = useState('');
-  const [floor, setFloor] = useState('');
-  const [rooms, setRooms] = useState('');
-  const [maxTokens, setMaxTokens] = useState('50');
-  const [clinicHead, setClinicHead] = useState('');
-  const [selectedDays, setSelectedDays] = useState<number[]>([0, 1, 2, 3, 4, 5]);
+function AddClinicWingScreen({
+  clinics,
+  wing,
+  doctors,
+  onBack,
+}: {
+  clinics: ClinicWing[];
+  wing: ClinicWing | null;
+  doctors: Doctor[];
+  onBack: () => void;
+}) {
+  const [wingName, setWingName] = useState(wing?.name ?? '');
+  const [building, setBuilding] = useState(wing?.building ?? '');
+  const [floor, setFloor] = useState(wing?.floor ?? '');
+  const [rooms, setRooms] = useState(wing?.rooms ?? '');
+  const [maxTokens, setMaxTokens] = useState(String(wing?.maxDailyTokens ?? 50));
+  const [clinicHead, setClinicHead] = useState(wing?.clinicHead ?? '');
+  const [wingActive, setWingActive] = useState(wing?.active ?? true);
+  const [selectedDays, setSelectedDays] = useState<number[]>(
+    (wing?.operatingDays ?? DAY_LABELS)
+      .map((day) => DAY_LABELS.indexOf(day))
+      .filter((index) => index >= 0)
+  );
   const [saving, setSaving] = useState(false);
 
   const DAYS = ['M', 'T', 'W', 'T', 'F', 'S'];
-  const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const TOKEN_PRESETS = [30, 50, 75, 100];
 
   const toggleDay = (idx: number) => {
@@ -502,27 +959,56 @@ function AddClinicWingScreen({ onBack }: { onBack: () => void }) {
   };
 
   const handleSave = async () => {
-    if (!wingName.trim() || !building.trim() || !rooms.trim()) {
-      Alert.alert('Validation', 'Please fill in all required fields');
+    const parsedMaxTokens = Number(maxTokens);
+    if (!wingName.trim() || !building.trim() || !floor.trim() || !rooms.trim()) {
+      Alert.alert('Validation', 'Enter the wing name, building, floor, and allocated rooms.');
+      return;
+    }
+    if (getRoomNumbers(rooms).length === 0) {
+      Alert.alert('Validation', 'Enter valid room numbers or a room range, such as Rooms 11 - 16.');
+      return;
+    }
+    if (!Number.isInteger(parsedMaxTokens) || parsedMaxTokens < 1) {
+      Alert.alert('Validation', 'Maximum daily tokens must be a positive whole number.');
+      return;
+    }
+    if (selectedDays.length === 0) {
+      Alert.alert('Validation', 'Select at least one operating day.');
+      return;
+    }
+    if (clinics.some((clinic) =>
+      clinic.id !== wing?.id &&
+      clinic.name.trim().toLowerCase() === wingName.trim().toLowerCase()
+    )) {
+      Alert.alert('Validation', 'A clinic wing with this name already exists.');
       return;
     }
     setSaving(true);
     try {
-      const { addClinicWing } = await import('@/services/adminService');
-      await addClinicWing({
+      const wingData = {
         name: wingName.trim(),
         building: building.trim(),
         floor: floor.trim(),
         rooms: rooms.trim(),
-        maxDailyTokens: parseInt(maxTokens, 10),
+        maxDailyTokens: parsedMaxTokens,
         clinicHead: clinicHead.trim() || undefined,
         operatingDays: selectedDays.map((i) => DAY_LABELS[i]),
-        active: true,
-      });
-      Alert.alert('Success', `${wingName} has been added and activated!`, [
+        active: wingActive,
+      };
+      if (wing) {
+        if (!wing.id) {
+          Alert.alert('Error', 'This clinic wing cannot be edited because its record has no ID.');
+          return;
+        }
+        await updateClinicWing(wing.id, wingData);
+      } else {
+        await addClinicWing(wingData);
+      }
+      Alert.alert('Success', `${wingName} has been ${wing ? 'updated' : 'added'} successfully!`, [
         { text: 'OK', onPress: onBack },
       ]);
-    } catch (e) {
+    } catch (error) {
+      console.warn('Failed to save clinic wing changes', error);
       Alert.alert('Error', 'Failed to save clinic wing');
     } finally {
       setSaving(false);
@@ -543,9 +1029,9 @@ function AddClinicWingScreen({ onBack }: { onBack: () => void }) {
 
         <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
           <View style={styles.wingHeader}>
-            <Text style={styles.wingTitle}>Add Clinic Wing</Text>
+            <Text style={styles.wingTitle}>{wing ? 'Edit Clinic Wing' : 'Add Clinic Wing'}</Text>
             <Text style={styles.wingSubtitle}>
-              Create a new outpatient clinic department and allocate rooms
+              {wing ? 'Update department details and room allocation' : 'Create a new outpatient clinic department and allocate rooms'}
             </Text>
           </View>
 
@@ -665,6 +1151,11 @@ function AddClinicWingScreen({ onBack }: { onBack: () => void }) {
                 onChangeText={setClinicHead}
               />
             </View>
+            {doctors.length > 0 && (
+              <Text style={styles.helperText}>
+                Doctors: {doctors.map((doctor) => doctor.name).join(', ')}
+              </Text>
+            )}
 
             {/* Operating Schedule */}
             <View style={styles.sectionHeaderRow}>
@@ -697,6 +1188,17 @@ function AddClinicWingScreen({ onBack }: { onBack: () => void }) {
                 </TouchableOpacity>
               ))}
             </View>
+            <View style={styles.statusRow}>
+              <Text style={styles.fieldLabel}>Clinic wing status</Text>
+              <TouchableOpacity
+                style={[styles.statusToggle, wingActive ? styles.statusToggleOn : styles.statusToggleOff]}
+                onPress={() => setWingActive((active) => !active)}
+                accessibilityRole="switch"
+                accessibilityState={{ checked: wingActive }}
+              >
+                <Text style={styles.statusToggleText}>{wingActive ? 'Active' : 'Inactive'}</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           <TouchableOpacity
@@ -707,7 +1209,9 @@ function AddClinicWingScreen({ onBack }: { onBack: () => void }) {
             {saving ? (
               <ActivityIndicator color="#fff" />
             ) : (
-              <Text style={styles.saveWingBtnText}>✓ Save & Activate Wing</Text>
+              <Text style={styles.saveWingBtnText}>
+                ✓ {wing ? 'Save Changes' : 'Save & Activate Wing'}
+              </Text>
             )}
           </TouchableOpacity>
           <TouchableOpacity style={styles.cancelBtn} onPress={onBack}>
@@ -842,6 +1346,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   dropdownText: { fontSize: 14, color: '#1A1D2E' },
+  disabledDropdown: { opacity: 0.6 },
   dropdownArrow: { fontSize: 12, color: '#8B90A7' },
   dropdownMenu: {
     borderWidth: 1,
@@ -918,10 +1423,12 @@ const styles = StyleSheet.create({
     borderColor: '#E5E7EB',
   },
   dayBtnActive: { backgroundColor: '#5B6CF8', borderColor: '#5B6CF8' },
+  dayBtnDisabled: { backgroundColor: '#F9FAFB', borderColor: '#EEF0F4' },
   dayBtnText: { fontSize: 12, fontWeight: '700', color: '#6B7280' },
   dayBtnTextActive: { color: '#fff' },
   dayBtnSub: { fontSize: 9, color: '#9CA3AF', marginTop: 2 },
   dayBtnSubActive: { color: 'rgba(255,255,255,0.8)' },
+  dayBtnDisabledText: { color: '#C7CBD3' },
 
   tokenPresetsRow: { flexDirection: 'row', gap: 8, marginTop: 8, marginBottom: 4 },
   tokenPresetBtn: {
@@ -985,6 +1492,38 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 1,
   },
+  liveDepartmentCard: {
+    backgroundColor: '#fff',
+    marginHorizontal: 16,
+    marginBottom: 10,
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#E7EAF2',
+  },
+  liveDepartmentHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginBottom: 8,
+  },
+  liveDepartmentDoctor: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderTopWidth: 1,
+    borderTopColor: '#F0F1F5',
+    paddingTop: 8,
+    marginTop: 6,
+    gap: 8,
+  },
+  inlineEditBtn: {
+    backgroundColor: '#F5F6FA',
+    borderRadius: 8,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+  },
   clinicIcon: {
     width: 40,
     height: 40,
@@ -998,6 +1537,34 @@ const styles = StyleSheet.create({
   clinicInfo: { flex: 1 },
   clinicName: { fontSize: 14, fontWeight: '700', color: '#1A1D2E' },
   clinicSub: { fontSize: 11, color: '#8B90A7', marginTop: 2 },
+  doctorRosterCard: {
+    backgroundColor: '#fff',
+    marginHorizontal: 16,
+    marginBottom: 8,
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#E7EAF2',
+  },
+  doctorRosterTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  doctorRosterName: { flex: 1, fontSize: 14, color: '#1A1D2E', fontWeight: '700' },
+  doctorRosterTokens: { fontSize: 12, color: '#5B6CF8', fontWeight: '700' },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 12,
+  },
+  statusToggle: {
+    minWidth: 78,
+    alignItems: 'center',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  statusToggleOn: { backgroundColor: '#E8F7EE' },
+  statusToggleOff: { backgroundColor: '#FDECEC' },
+  statusToggleText: { fontSize: 12, fontWeight: '700', color: '#374151' },
   manageBtn: {
     backgroundColor: '#EEF2FF',
     borderRadius: 8,

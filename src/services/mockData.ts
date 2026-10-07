@@ -5,7 +5,10 @@ export function getTodayDateString(offsetDays = 0): string {
   if (offsetDays !== 0) {
     d.setDate(d.getDate() + offsetDays);
   }
-  return d.toISOString().split('T')[0];
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 export const INITIAL_DOCTORS: Doctor[] = [
@@ -78,7 +81,7 @@ export const INITIAL_DOCTORS: Doctor[] = [
   {
     id: 'doc-7',
     name: 'Dr. Anoma Wijesinghe',
-    department: 'ENT',
+    department: 'Eye OPD',
     hospital: 'Colombo National Hospital',
     room: 'Room 08',
     maxTokens: 35,
@@ -164,8 +167,8 @@ export function getInitialQueues(): Queue[] {
       id: 'queue-1',
       doctorId: 'doc-1',
       date: today,
-      currentToken: 14,
-      nextTokenNumber: 15,
+      currentToken: 0,
+      nextTokenNumber: 1,
       nextPatientName: 'Kasun Fernando',
       status: 'active',
       delayMinutes: 0,
@@ -224,8 +227,8 @@ export function getInitialQueues(): Queue[] {
       id: 'queue-7',
       doctorId: 'doc-7',
       date: today,
-      currentToken: 5,
-      nextTokenNumber: 6,
+      currentToken: 4,
+      nextTokenNumber: 5,
       nextPatientName: 'Nuwan Kulasekara',
       status: 'delayed',
       delayMinutes: 15,
@@ -265,7 +268,7 @@ export function getInitialAppointments(): Appointment[] {
       time: '09:45 AM',
       endTime: '10:00 AM',
       status: 'upcoming',
-      tokenNumber: 15,
+      tokenNumber: 1,
       bookingType: 'Online App Booking',
       waitingInfo: 'Waiting in OPD Lobby A • Next in queue',
     },
@@ -280,12 +283,12 @@ export function getInitialAppointments(): Appointment[] {
       department: 'General OPD',
       slotId: 'slot-1',
       date: today,
-      time: '09:30 AM',
-      endTime: '09:45 AM',
-      status: 'completed',
-      tokenNumber: 14,
+      time: '10:00 AM',
+      endTime: '10:15 AM',
+      status: 'upcoming',
+      tokenNumber: 2,
       bookingType: 'Online App Booking',
-      waitingInfo: 'Consultation completed',
+      waitingInfo: 'Second patient in the General OPD queue',
     },
     {
       id: 'appt-3',
@@ -367,13 +370,13 @@ export function getInitialAppointments(): Appointment[] {
       patientCode: 'PT-2026-1120',
       doctorId: 'doc-7',
       doctorName: 'Dr. Anoma Wijesinghe',
-      department: 'ENT',
+      department: 'Eye OPD',
       slotId: 'slot-7',
       date: today,
       time: '11:15 AM',
       endTime: '11:35 AM',
       status: 'upcoming',
-      tokenNumber: 6,
+      tokenNumber: 5,
       bookingType: 'Online App Booking',
       waitingInfo: 'Delay broadcast received (+15m)',
     },
