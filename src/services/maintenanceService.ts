@@ -2,7 +2,7 @@ import {
   addDoc,
   collection,
   doc,
-  getDocs,
+  getDocsFromServer,
   serverTimestamp,
   Timestamp,
   updateDoc,
@@ -84,7 +84,7 @@ function parseMaintenance(
 
 export async function getCurrentMaintenance(): Promise<MaintenanceRecord | null> {
   const now = Timestamp.now();
-  const snapshot = await getDocs(maintenanceCollection);
+  const snapshot = await getDocsFromServer(maintenanceCollection);
   return snapshot.docs
     .map((document) => parseMaintenance(document.id, document.data()))
     .filter(
@@ -98,7 +98,7 @@ export async function getCurrentMaintenance(): Promise<MaintenanceRecord | null>
 
 export async function getNextMaintenance(): Promise<MaintenanceRecord | null> {
   const now = Timestamp.now();
-  const snapshot = await getDocs(maintenanceCollection);
+  const snapshot = await getDocsFromServer(maintenanceCollection);
   return snapshot.docs
     .map((document) => parseMaintenance(document.id, document.data()))
     .filter(
@@ -113,7 +113,7 @@ export async function getNextMaintenance(): Promise<MaintenanceRecord | null> {
 export async function getMaintenanceHistory(
   maxResults = 20
 ): Promise<MaintenanceRecord[]> {
-  const snapshot = await getDocs(maintenanceCollection);
+  const snapshot = await getDocsFromServer(maintenanceCollection);
   return snapshot.docs
     .flatMap((document) => {
       const record = parseMaintenance(document.id, document.data());

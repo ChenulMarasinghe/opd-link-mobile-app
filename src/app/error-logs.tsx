@@ -40,6 +40,8 @@ export default function ErrorLogsScreen() {
       [log.title, log.message, log.service].some((value) => value.toLowerCase().includes(term))
     );
   }, [logs, search]);
+  const unresolvedLogs = filteredLogs.filter((log) => log.status !== 'resolved');
+  const resolvedLogs = filteredLogs.filter((log) => log.status === 'resolved');
 
   return (
     <SafeAreaView edges={['top']} style={styles.safeArea}>
@@ -64,7 +66,7 @@ export default function ErrorLogsScreen() {
 
         <ThemedText style={styles.sectionTitle}>Recent Errors</ThemedText>
         <View style={styles.list}>
-          {filteredLogs.map((log) => (
+          {unresolvedLogs.map((log) => (
             <View key={log.id} style={styles.logCard}>
               <View style={styles.logTop}>
                 <ThemedText style={[styles.level, log.severity === 'critical' ? styles.critical : styles.warning]}>{capitalize(log.severity)}</ThemedText>
@@ -77,7 +79,24 @@ export default function ErrorLogsScreen() {
               </Pressable>
             </View>
           ))}
-          {!loading && filteredLogs.length === 0 ? <ThemedText style={styles.emptyText}>No error logs found</ThemedText> : null}
+          {!loading && unresolvedLogs.length === 0 ? <ThemedText style={styles.emptyText}>No unresolved errors found</ThemedText> : null}
+        </View>
+        <ThemedText style={styles.sectionTitle}>Resolved Errors</ThemedText>
+        <View style={styles.list}>
+          {resolvedLogs.map((log) => (
+            <View key={log.id} style={styles.logCard}>
+              <View style={styles.logTop}>
+                <ThemedText style={styles.resolvedLevel}>Resolved</ThemedText>
+                <ThemedText style={styles.time}>{formatTime(log.resolvedAt ?? log.createdAt)}</ThemedText>
+              </View>
+              <ThemedText style={styles.title}>{log.title}</ThemedText>
+              <ThemedText style={styles.detail}>{log.message}</ThemedText>
+              <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/error-log-details', params: { id: log.id } })} style={styles.detailsButton}>
+                <ThemedText style={styles.detailsText}>View Details ›</ThemedText>
+              </Pressable>
+            </View>
+          ))}
+          {!loading && resolvedLogs.length === 0 ? <ThemedText style={styles.emptyText}>No resolved errors found</ThemedText> : null}
         </View>
         <Pressable accessibilityRole="button" onPress={() => void loadLogs()} style={styles.refreshButton}>
           <SymbolView name={{ ios: 'arrow.clockwise', android: 'refresh', web: 'refresh' }} size={12} tintColor="#FFF" />
@@ -134,6 +153,7 @@ const styles = StyleSheet.create({
   level: { borderRadius: 5, paddingHorizontal: 7, paddingVertical: 3, fontSize: 8, fontWeight: '700' },
   critical: { color: '#F04444', backgroundColor: '#FFE0E0' },
   warning: { color: '#E99A00', backgroundColor: '#FFF1C8' },
+  resolvedLevel: { color: '#0AAB83', backgroundColor: '#DDF8F1', borderRadius: 5, paddingHorizontal: 7, paddingVertical: 3, fontSize: 8, fontWeight: '700' },
   time: { color: '#536681', fontSize: 8 },
   title: { color: '#18233A', fontSize: 12, fontWeight: '700' },
   detail: { color: '#536681', fontSize: 10, marginTop: 2 },

@@ -1,10 +1,12 @@
 ﻿import { router } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { useCallback, useEffect, useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useAuth } from '@/context/AuthContext';
 import { ThemedText } from '@/components/themed-text';
+import { runSystemDiagnostics, type DiagnosticCheck, type DiagnosticsResult, type DiagnosticStatus } from '@/services/diagnosticsService';
 import { runMonitoringChecks, type MonitoringResult, type ServiceStatus } from '@/services/monitoringService';
 
 const serviceDefinitions = [
@@ -24,7 +26,11 @@ const navigationItems = [
 
 export default function ITMonitoringScreen() {
   const insets = useSafeAreaInsets();
+  const { profile } = useAuth();
   const [monitoring, setMonitoring] = useState<MonitoringResult | null>(null);
+  const [diagnostics, setDiagnostics] = useState<DiagnosticsResult | null>(null);
+  const [diagnosticsLoading, setDiagnosticsLoading] = useState(false);
+  const [diagnosticsError, setDiagnosticsError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -49,6 +55,21 @@ export default function ITMonitoringScreen() {
     }, 30000);
     return () => clearInterval(interval);
   }, [refreshMonitoring]);
+
+  const runDiagnostics = useCallback(async () => {
+    if (diagnosticsLoading) return;
+    setDiagnosticsLoading(true);
+    setDiagnosticsError(null);
+    try {
+      setDiagnostics(await runSystemDiagnostics(profile?.role));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Diagnostics could not be started.';
+      setDiagnosticsError(message);
+      console.error('Unable to run system diagnostics.', error);
+    } finally {
+      setDiagnosticsLoading(false);
+    }
+  }, [diagnosticsLoading, profile?.role]);
 
   const status = monitoring?.overallStatus;
   const statusTitle = status === 'critical' ? 'Critical System Alert' : status === 'warning' ? 'System Warning' : status === 'operational' ? 'All Systems Operational' : 'Checking System Status';
@@ -103,6 +124,57 @@ export default function ITMonitoringScreen() {
           <MetricCard label="API Response" value={formatResponseTime(monitoring?.responseTime)} status={formatHealthStatus(monitoring?.responseTime)} symbols={{ ios: 'speedometer', android: 'speed', web: 'speed' }} />
           <MetricCard label="Server Load" value="N/A" status="NOT MEASURED" symbols={{ ios: 'server.rack', android: 'dns', web: 'dns' }} />
           <MetricCard label="Database" value={monitoring?.databaseUsage ?? 'Checking...'} status={formatServiceStatus(serviceStatuses?.database)} symbols={{ ios: 'externaldrive.fill', android: 'storage', web: 'storage' }} />
+        </View>
+
+        <View style={styles.diagnosticsCard}>
+          <ThemedText style={styles.diagnosticsHeading}>System Diagnostics</ThemedText>
+          <ThemedText style={styles.diagnosticsDescription}>
+            Check the health and connectivity of your hospital system.
+          </ThemedText>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ disabled: diagnosticsLoading }}
+            disabled={diagnosticsLoading || profile?.role !== 'it'}
+            onPress={() => void runDiagnostics()}
+            style={({ pressed }) => [
+              styles.diagnosticsButton,
+              (pressed || diagnosticsLoading) && styles.pressed,
+            ]}>
+            {diagnosticsLoading ? (
+              <ActivityIndicator color="#FFFFFF" size="small" />
+            ) : (
+              <SymbolView name={{ ios: 'stethoscope', android: 'health_and_safety', web: 'health_and_safety' }} size={14} tintColor="#FFFFFF" />
+            )}
+            <ThemedText style={styles.diagnosticsButtonText}>
+              {diagnosticsLoading ? 'Running Diagnostics...' : diagnostics ? 'Run Again' : 'Run Diagnostics'}
+            </ThemedText>
+          </Pressable>
+
+          {diagnosticsError ? <ThemedText style={styles.diagnosticsError}>{diagnosticsError}</ThemedText> : null}
+          {profile?.role !== 'it' ? (
+            <ThemedText style={styles.diagnosticsError}>
+              Only authorized IT Supporters can run diagnostics.
+            </ThemedText>
+          ) : null}
+          {diagnostics ? (
+            <View style={styles.diagnosticResults}>
+              <DiagnosticRow label="Backend Server" check={diagnostics.backend} />
+              <DiagnosticRow label="Database Connection" check={diagnostics.database} />
+              <DiagnosticRow label="API Response Time" check={diagnostics.apiResponseTime} />
+              <DiagnosticRow
+                label="Overall System Health"
+                check={{
+                  status: diagnostics.overallHealth,
+                  message: getOverallHealthMessage(diagnostics.overallHealth),
+                }}
+              />
+              <ThemedText style={styles.lastChecked}>
+                Last checked {diagnostics.checkedAt.toDate().toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}
+              </ThemedText>
+            </View>
+          ) : (
+            <ThemedText style={styles.notChecked}>Not checked yet</ThemedText>
+          )}
         </View>
 
         <ThemedText style={styles.sectionTitle}>Services</ThemedText>
@@ -181,6 +253,42 @@ function formatUpdatedTime(value: MonitoringResult['lastUpdated'] | undefined) {
   return value ? value.toDate().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '--';
 }
 
+function getStatusColor(status: DiagnosticStatus) {
+  if (status === 'healthy') return '#0AAB83';
+  if (status === 'warning') return '#E99A00';
+  if (status === 'critical') return '#F04444';
+  return '#91A0B5';
+}
+
+function getStatusLabel(status: DiagnosticStatus) {
+  if (status === 'healthy') return 'Healthy';
+  if (status === 'warning') return 'Warning';
+  if (status === 'critical') return 'Critical';
+  return 'Unavailable';
+}
+
+function getOverallHealthMessage(status: DiagnosticStatus) {
+  if (status === 'healthy') return 'All required checks passed.';
+  if (status === 'warning') return 'System is available but needs attention.';
+  if (status === 'critical') return 'A required system check failed.';
+  return 'System health could not be determined.';
+}
+
+function DiagnosticRow({ label, check }: { label: string; check: DiagnosticCheck }) {
+  const color = getStatusColor(check.status);
+  const responseTime = check.responseTimeMs === undefined ? '' : ` (${check.responseTimeMs} ms)`;
+  return (
+    <View style={styles.diagnosticRow}>
+      <View style={[styles.diagnosticDot, { backgroundColor: color }]} />
+      <View style={styles.diagnosticCopy}>
+        <ThemedText style={styles.diagnosticLabel}>{label}</ThemedText>
+        <ThemedText style={styles.diagnosticMessage}>{check.message}{responseTime}</ThemedText>
+      </View>
+      <ThemedText style={[styles.diagnosticStatus, { color }]}>{getStatusLabel(check.status)}</ThemedText>
+    </View>
+  );
+}
+
 function MetricCard({ label, value, status, symbols }: { label: string; value: string; status: string; symbols: { ios: 'speedometer' | 'server.rack' | 'externaldrive.fill'; android: 'speed' | 'dns' | 'storage'; web: 'speed' | 'dns' | 'storage' } }) {
   return (
     <View style={styles.metricCard}>
@@ -222,6 +330,21 @@ const styles = StyleSheet.create({
   metricLabel: { color: '#43536D', fontSize: 7 },
   metricValue: { color: '#18233A', fontSize: 14, lineHeight: 18, fontWeight: '800', marginTop: 2 },
   metricStatus: { color: '#0AAB83', fontSize: 7, lineHeight: 10, fontWeight: '700', marginTop: 2 },
+  diagnosticsCard: { backgroundColor: '#FFFFFF', borderRadius: 14, padding: 12, marginTop: 12 },
+  diagnosticsHeading: { color: '#18233A', fontSize: 13, lineHeight: 17, fontWeight: '800' },
+  diagnosticsDescription: { color: '#536681', fontSize: 9, lineHeight: 13, marginTop: 2 },
+  diagnosticsButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#6875FF', borderRadius: 11, minHeight: 34, marginTop: 10 },
+  diagnosticsButtonText: { color: '#FFFFFF', fontSize: 9, fontWeight: '700' },
+  diagnosticsError: { color: '#F04444', backgroundColor: '#FFE8E8', borderRadius: 8, padding: 8, fontSize: 9, lineHeight: 12, marginTop: 9 },
+  diagnosticResults: { marginTop: 11 },
+  diagnosticRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#E7EDF5' },
+  diagnosticDot: { width: 8, height: 8, borderRadius: 4, marginRight: 8 },
+  diagnosticCopy: { flex: 1, paddingRight: 6 },
+  diagnosticLabel: { color: '#18233A', fontSize: 9, fontWeight: '700' },
+  diagnosticMessage: { color: '#536681', fontSize: 8, lineHeight: 11, marginTop: 1 },
+  diagnosticStatus: { fontSize: 8, fontWeight: '700' },
+  lastChecked: { color: '#91A0B5', fontSize: 8, marginTop: 7 },
+  notChecked: { color: '#91A0B5', fontSize: 9, marginTop: 10 },
   sectionTitle: { color: '#18233A', fontSize: 12, lineHeight: 16, fontWeight: '700', marginTop: 12, marginBottom: 6 },
   servicesCard: { backgroundColor: '#FFFFFF', borderRadius: 14, overflow: 'hidden' },
   serviceRow: { minHeight: 34, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 9, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#E7EDF5' },

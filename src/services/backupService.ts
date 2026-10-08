@@ -2,7 +2,7 @@ import {
   addDoc,
   collection,
   doc,
-  getDocs,
+  getDocsFromServer,
   limit,
   orderBy,
   query,
@@ -100,7 +100,7 @@ function parseBackup(id: string, data: Record<string, unknown>): BackupRecord | 
 }
 
 export async function getLatestBackup(): Promise<BackupRecord | null> {
-  const snapshot = await getDocs(
+  const snapshot = await getDocsFromServer(
     query(backupCollection, orderBy("createdAt", "desc"), limit(1))
   );
   const document = snapshot.docs[0];
@@ -108,7 +108,7 @@ export async function getLatestBackup(): Promise<BackupRecord | null> {
 }
 
 export async function getBackupHistory(maxResults = 20): Promise<BackupRecord[]> {
-  const snapshot = await getDocs(
+  const snapshot = await getDocsFromServer(
     query(backupCollection, orderBy("createdAt", "desc"), limit(maxResults))
   );
   return snapshot.docs.flatMap((document) => {

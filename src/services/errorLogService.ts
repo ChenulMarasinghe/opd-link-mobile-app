@@ -3,11 +3,12 @@ import {
   collection,
   doc,
   getDoc,
-  getDocs,
+  getDocsFromServer,
   limit,
   orderBy,
   query,
   serverTimestamp,
+  setDoc,
   Timestamp,
   updateDoc,
   where,
@@ -87,7 +88,7 @@ function parseErrorLog(id: string, data: Record<string, unknown>): ErrorLog | nu
 }
 
 export async function getErrorLogs(maxResults = 20): Promise<ErrorLog[]> {
-  const snapshot = await getDocs(
+  const snapshot = await getDocsFromServer(
     query(errorLogsCollection, orderBy("createdAt", "desc"), limit(maxResults))
   );
   return snapshot.docs.flatMap((errorDocument) => {
@@ -100,9 +101,15 @@ export async function getErrorSummary(): Promise<ErrorSummary> {
   // Keep each query constrained to one field so this works without a
   // composite index. Firestore automatically indexes individual fields.
   const [critical, warnings, resolved] = await Promise.all([
-    getDocs(query(errorLogsCollection, where("severity", "==", "critical"))),
-    getDocs(query(errorLogsCollection, where("severity", "==", "warning"))),
-    getDocs(query(errorLogsCollection, where("status", "==", "resolved"))),
+    getDocsFromServer(
+      query(errorLogsCollection, where("severity", "==", "critical"))
+    ),
+    getDocsFromServer(
+      query(errorLogsCollection, where("severity", "==", "warning"))
+    ),
+    getDocsFromServer(
+      query(errorLogsCollection, where("status", "==", "resolved"))
+    ),
   ]);
 
   return {
@@ -136,4 +143,26 @@ export async function createErrorLog(error: CreateErrorLogInput): Promise<string
     ...(error.status === "resolved" ? { resolvedAt: serverTimestamp() } : {}),
   });
   return reference.id;
+}
+
+export async function recordDiagnosticFailure(
+  category: "connectivity" | "response-time",
+  message: string,
+  severity: ErrorSeverity
+): Promise<void> {
+  await setDoc(
+    doc(db, "errorLogs", `diagnostics-${category}`),
+    {
+      title: `System diagnostics: ${category}`,
+      message,
+      severity,
+      service: "System Diagnostics",
+      status: "open",
+      errorCode: `DIAGNOSTIC_${category.replace("-", "_").toUpperCase()}`,
+      source: "system-diagnostics",
+      createdAt: serverTimestamp(),
+      resolvedAt: null,
+    },
+    { merge: true }
+  );
 }

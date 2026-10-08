@@ -32,6 +32,7 @@ export default function ErrorLogDetailsScreen() {
             <ThemedText style={styles.meta}>Service: {error.service}</ThemedText>
             <ThemedText style={styles.meta}>Severity: {error.severity}</ThemedText>
             <ThemedText style={styles.meta}>Status: {error.status}</ThemedText>
+            {error.resolvedAt ? <ThemedText style={styles.meta}>Resolved: {formatDateTime(error.resolvedAt)}</ThemedText> : null}
             {error.errorCode ? <ThemedText style={styles.meta}>Code: {error.errorCode}</ThemedText> : null}
             {error.source ? <ThemedText style={styles.meta}>Source: {error.source}</ThemedText> : null}
           </View>
@@ -41,6 +42,10 @@ export default function ErrorLogDetailsScreen() {
       </ScrollView>
     </SafeAreaView>
   );
+}
+
+function formatDateTime(timestamp: ErrorLog["createdAt"]) {
+  return timestamp.toDate().toLocaleString();
 }
 
 const styles = StyleSheet.create({
