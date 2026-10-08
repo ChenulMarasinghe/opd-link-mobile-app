@@ -1,9 +1,11 @@
-import { Text, View } from "react-native";
+import { router } from "expo-router";
+import ProfileSettingsScreen from "../../screens/patient/ProfileSettingsScreen";
 
-export default function Screen() {
+export default function ProfileRoute() {
   return (
-    <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-      <Text>profile (placeholder)</Text>
-    </View>
+    <ProfileSettingsScreen
+      onBack={() => router.replace("/dashboard")}
+      onOpenClinicStatus={() => router.push("/clinic-status")}
+    />
   );
 }

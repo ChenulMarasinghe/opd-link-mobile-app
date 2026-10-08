@@ -159,7 +159,7 @@ export default function DashboardScreen() {
         <View style={styles.card}>
           <View style={{ flex: 1 }}>
             <Text style={styles.upTitle}>No upcoming appointments</Text>
-            <Text style={styles.upText}>Tap "Book an Appointment" to get started.</Text>
+            <Text style={styles.upText}>Tap &quot;Book an Appointment&quot; to get started.</Text>
           </View>
         </View>
       ) : (
@@ -178,11 +178,21 @@ export default function DashboardScreen() {
           <Text style={styles.actionText}>Queue Status</Text>
         </Pressable>
       </View>
+      <View style={styles.actions}>
+        <Pressable style={[styles.actionBtn, { backgroundColor: "#0F8F6B" }]} onPress={() => router.push("/upcoming-appointments")}>
+          <Ionicons name="calendar-number-outline" size={30} color="#fff" />
+          <Text style={styles.actionText}>My Appointments</Text>
+        </Pressable>
+        <Pressable style={[styles.actionBtn, { backgroundColor: "#F59E0B" }]} onPress={() => router.push("/clinic-status")}>
+          <Ionicons name="medical-outline" size={30} color="#fff" />
+          <Text style={styles.actionText}>Clinic Status</Text>
+        </Pressable>
+      </View>
 
       {/* OPD availability (display only) */}
       <Text style={styles.sectionTitle}>OPD Availability</Text>
       <View style={styles.dateRow}>
-        <Text style={styles.dateLabel}>Today's OPD Status</Text>
+        <Text style={styles.dateLabel}>Today&apos;s OPD Status</Text>
         <Text style={styles.dateLabel}>{formatLongDate(now)}</Text>
       </View>
 
