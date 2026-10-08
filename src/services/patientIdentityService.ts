@@ -14,8 +14,10 @@ export interface PatientIdentity {
 let developmentGuestIdentityPromise: Promise<PatientIdentity> | null = null;
 
 function createDevelopmentGuestId(): string {
-  const uniquePart = Array.from({ length: 4 }, () =>
-    Math.random().toString(36).slice(2, 10)
+  const randomBytes = new Uint8Array(16);
+  globalThis.crypto.getRandomValues(randomBytes);
+  const uniquePart = Array.from(randomBytes, (value) =>
+    value.toString(16).padStart(2, '0')
   ).join('');
   return `dev_guest_${Date.now().toString(36)}_${uniquePart}`;
 }
