@@ -20,8 +20,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 import LogoutButton from '../../components/LogoutButton';
-
-const PATIENT_ID = 'patient_demo';
+import { useAuth } from '../../context/AuthContext';
 
 type EditableDetails = Pick<PatientProfile, 'fullName' | 'phone' | 'email' | 'nicNumber'>;
 type EditableFieldErrors = Record<keyof EditableDetails, string | null>;
@@ -82,6 +81,8 @@ export default function ProfileSettingsScreen({
   onBack,
   onOpenClinicStatus,
 }: ProfileSettingsScreenProps) {
+  const { user, profile: accountProfile } = useAuth();
+  const patientId = user?.uid;
   const [profile, setProfile] = useState<PatientProfile | null>(null);
   const [draft, setDraft] = useState<EditableDetails>(EMPTY_DETAILS);
   const [fieldErrors, setFieldErrors] = useState<EditableFieldErrors>(EMPTY_FIELD_ERRORS);
@@ -104,24 +105,37 @@ export default function ProfileSettingsScreen({
     let isMounted = true;
 
     async function loadProfile() {
+      if (!patientId) {
+        setProfile(null);
+        setLoading(false);
+        return;
+      }
       setLoading(true);
       setLoadError(null);
 
       try {
-        let loadedProfile = await getPatientProfile(PATIENT_ID);
+        let loadedProfile = await getPatientProfile(patientId);
         if (!loadedProfile) {
-          loadedProfile = await createPatientProfile(PATIENT_ID);
+          loadedProfile = await createPatientProfile(patientId);
         }
 
+        // Account details are authoritative defaults for newly created patient records.
+        const resolvedProfile = {
+          ...loadedProfile,
+          fullName: loadedProfile.fullName || accountProfile?.name || '',
+          phone: loadedProfile.phone || accountProfile?.phone || '',
+          email: loadedProfile.email || accountProfile?.email || user?.email || '',
+        };
+
         if (isMounted) {
-          setProfile(loadedProfile);
+          setProfile(resolvedProfile);
           setDraft({
-            fullName: loadedProfile.fullName,
-            phone: loadedProfile.phone,
-            email: loadedProfile.email,
-            nicNumber: loadedProfile.nicNumber,
+            fullName: resolvedProfile.fullName,
+            phone: resolvedProfile.phone,
+            email: resolvedProfile.email,
+            nicNumber: resolvedProfile.nicNumber,
           });
-          setEditing(!loadedProfile.fullName && !loadedProfile.phone && !loadedProfile.email);
+          setEditing(!resolvedProfile.fullName && !resolvedProfile.phone && !resolvedProfile.email);
         }
       } catch (error) {
         if (isMounted) {
@@ -136,7 +150,7 @@ export default function ProfileSettingsScreen({
     return () => {
       isMounted = false;
     };
-  }, [retryCount]);
+  }, [retryCount, patientId, accountProfile, user?.email]);
 
   const startEditing = () => {
     if (!profile) return;
@@ -185,7 +199,8 @@ export default function ProfileSettingsScreen({
     setSaving(true);
 
     try {
-      await updatePatientProfile(PATIENT_ID, updates);
+      if (!patientId) return;
+      await updatePatientProfile(patientId, updates);
       setProfile((current) => current ? { ...current, ...updates } : current);
       setEditing(false);
       setFieldErrors(EMPTY_FIELD_ERRORS);
@@ -209,7 +224,8 @@ export default function ProfileSettingsScreen({
     setFeedback(null);
 
     try {
-      await updatePatientProfile(PATIENT_ID, updates);
+      if (!patientId) return;
+      await updatePatientProfile(patientId, updates);
       setFeedback({ type: 'success', message: 'Setting updated.' });
     } catch (error) {
       setProfile(previousProfile);
