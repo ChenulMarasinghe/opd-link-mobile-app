@@ -412,7 +412,7 @@ export default function BookAppointmentScreen() {
 
           <Pressable
             style={[styles.confirmActionButton, styles.homeButton]}
-            onPress={() => router.replace('/dashboard')}
+            onPress={() => router.replace('/(patient)/dashboard')}
           >
             <Text style={styles.confirmActionButtonText}>Go to Home</Text>
           </Pressable>

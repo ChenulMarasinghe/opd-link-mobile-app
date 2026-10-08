@@ -1,3 +1,4 @@
+<<<<<<< Updated upstream
 import { useEffect, useState } from "react";
 import { Redirect } from "expo-router";
 import { useAuth } from "../context/AuthContext";
@@ -27,3 +28,19 @@ export default function Index() {
   if (profile.role === "it") return <Redirect href="/it-dashboard" />;
   return <Redirect href="/dashboard" />;
 }
+=======
+import { Redirect } from 'expo-router';
+import { ActivityIndicator, View } from 'react-native';
+import { useAuth } from '@/context/AuthContext';
+
+export default function Index() {
+  const { user, profile, loading } = useAuth();
+
+  if (loading) return <View style={{ flex: 1, justifyContent: 'center' }}><ActivityIndicator /></View>;
+  if (!user) return <Redirect href="/login" />;
+  if (profile?.role === 'it') return <Redirect href="/(it)/it-dashboard" />;
+  if (profile?.role === 'admin') return <Redirect href="/login" />;
+  if (profile?.role === 'patient') return <Redirect href="/(patient)/dashboard" />;
+  return <Redirect href="/login" />;
+}
+>>>>>>> Stashed changes

@@ -131,7 +131,7 @@ export default function QueueStatusScreen() {
         onPress: async () => {
           try {
             await cancelAppointment(appt.id);
-            router.replace("/dashboard");
+            router.replace("/(patient)/dashboard");
           } catch {
             Alert.alert("Could not leave", "Please try again.");
           }

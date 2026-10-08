@@ -63,7 +63,7 @@ export default function AppointmentDetailsScreen() {
   }, [appt?.patientNote]);
 
   const goBack = () =>
-    router.replace(returnTo === "/upcoming-appointments" ? "/upcoming-appointments" : "/dashboard");
+    router.replace(returnTo === "/upcoming-appointments" ? "/upcoming-appointments" : "/(patient)/dashboard");
 
   // Not found, or belongs to another patient
   if (appt === undefined) {

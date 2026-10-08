@@ -8,7 +8,7 @@ export default function NotificationsRoute() {
   return (
     <NotificationsScreen
       patientId={user?.uid}
-      onBack={() => router.replace("/dashboard")}
+      onBack={() => router.replace("/(patient)/dashboard")}
     />
   );
 }
