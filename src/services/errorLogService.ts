@@ -56,30 +56,47 @@ const isSeverity = (value: unknown): value is ErrorSeverity =>
 const isStatus = (value: unknown): value is ErrorStatus =>
   value === "open" || value === "investigating" || value === "resolved";
 
-const asTimestamp = (value: unknown): Timestamp | undefined =>
-  value instanceof Timestamp ? value : undefined;
+const asTimestamp = (value: unknown): Timestamp | undefined => {
+  if (value instanceof Timestamp) return value;
 
-function parseErrorLog(id: string, data: Record<string, unknown>): ErrorLog | null {
-  const createdAt = asTimestamp(data.createdAt);
   if (
-    typeof data.title !== "string" ||
-    typeof data.message !== "string" ||
-    typeof data.service !== "string" ||
-    !isSeverity(data.severity) ||
-    !isStatus(data.status) ||
-    !createdAt
+    value &&
+    typeof value === "object" &&
+    "seconds" in value &&
+    "nanoseconds" in value &&
+    typeof value.seconds === "number" &&
+    typeof value.nanoseconds === "number"
   ) {
+    return new Timestamp(value.seconds, value.nanoseconds);
+  }
+
+  if (typeof value === "string") {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? undefined : Timestamp.fromDate(date);
+  }
+
+  return undefined;
+};
+
+function parseErrorLog(
+  id: string,
+  data: Record<string, unknown>,
+  fallbackStatus: ErrorStatus = "open"
+): ErrorLog | null {
+  const createdAt = asTimestamp(data.createdAt) ?? Timestamp.fromMillis(0);
+  const severity = isSeverity(data.severity) ? data.severity : undefined;
+  if (!severity) {
     return null;
   }
 
   const resolvedAt = asTimestamp(data.resolvedAt);
   return {
     id,
-    title: data.title,
-    message: data.message,
-    severity: data.severity,
-    service: data.service,
-    status: data.status,
+    title: typeof data.title === "string" && data.title.trim() ? data.title : "Untitled error",
+    message: typeof data.message === "string" && data.message.trim() ? data.message : "No error description available.",
+    severity,
+    service: typeof data.service === "string" && data.service.trim() ? data.service : "System",
+    status: isStatus(data.status) ? data.status : fallbackStatus,
     ...(typeof data.errorCode === "string" ? { errorCode: data.errorCode } : {}),
     ...(typeof data.source === "string" ? { source: data.source } : {}),
     createdAt,
@@ -91,8 +108,34 @@ export async function getErrorLogs(maxResults = 20): Promise<ErrorLog[]> {
   const snapshot = await getDocsFromServer(
     query(errorLogsCollection, orderBy("createdAt", "desc"), limit(maxResults))
   );
-  return snapshot.docs.flatMap((errorDocument) => {
-    const parsed = parseErrorLog(errorDocument.id, errorDocument.data());
+  return parseErrorLogDocuments(snapshot.docs);
+}
+
+export async function getErrorLogsByCategory(
+  category: "critical" | "warning" | "resolved"
+): Promise<ErrorLog[]> {
+  const field = category === "resolved" ? "status" : "severity";
+  const value = category === "resolved" ? "resolved" : category;
+  const snapshot = await getDocsFromServer(
+    query(errorLogsCollection, where(field, "==", value))
+  );
+
+  return parseErrorLogDocuments(snapshot.docs, category === "resolved" ? "resolved" : "open")
+    .filter((log) => category === "resolved" || log.status !== "resolved")
+    .sort((first, second) => second.createdAt.toMillis() - first.createdAt.toMillis());
+}
+
+function parseErrorLogDocuments(
+  documents: Array<{ id: string; data: () => Record<string, unknown> }>,
+  fallbackStatus: ErrorStatus = "open"
+) {
+  return documents.flatMap((errorDocument) => {
+    const parsed = parseErrorLog(errorDocument.id, errorDocument.data(), fallbackStatus);
+    if (!parsed) {
+      console.warn(
+        `Skipping error log document "${errorDocument.id}" because its severity is missing or invalid.`
+      );
+    }
     return parsed ? [parsed] : [];
   });
 }

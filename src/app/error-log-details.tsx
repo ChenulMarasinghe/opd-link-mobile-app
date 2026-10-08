@@ -5,11 +5,13 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useEffect, useState } from "react";
 import { SymbolView } from "expo-symbols";
 import { ThemedText } from "@/components/themed-text";
-import { getErrorById, type ErrorLog } from "@/services/errorLogService";
+import { getErrorById, updateErrorStatus, type ErrorLog } from "@/services/errorLogService";
 
 export default function ErrorLogDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [error, setError] = useState<ErrorLog | null>(null);
+  const [resolving, setResolving] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -17,6 +19,22 @@ export default function ErrorLogDetailsScreen() {
       console.error("Unable to load error log details.", loadError);
     });
   }, [id]);
+
+  const resolveError = async () => {
+    if (!id || !error || error.status === "resolved" || resolving) return;
+
+    setResolving(true);
+    setActionError(null);
+    try {
+      await updateErrorStatus(id, "resolved");
+      router.replace("/error-logs");
+    } catch (resolveError) {
+      console.error("Unable to resolve error log.", resolveError);
+      setActionError("Unable to mark this error as resolved. Please try again.");
+    } finally {
+      setResolving(false);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -32,9 +50,23 @@ export default function ErrorLogDetailsScreen() {
             <ThemedText style={styles.meta}>Service: {error.service}</ThemedText>
             <ThemedText style={styles.meta}>Severity: {error.severity}</ThemedText>
             <ThemedText style={styles.meta}>Status: {error.status}</ThemedText>
+            <ThemedText style={styles.meta}>Type: {error.service} · {error.severity} error</ThemedText>
             {error.resolvedAt ? <ThemedText style={styles.meta}>Resolved: {formatDateTime(error.resolvedAt)}</ThemedText> : null}
             {error.errorCode ? <ThemedText style={styles.meta}>Code: {error.errorCode}</ThemedText> : null}
             {error.source ? <ThemedText style={styles.meta}>Source: {error.source}</ThemedText> : null}
+            {actionError ? <ThemedText style={styles.actionError}>{actionError}</ThemedText> : null}
+            {error.status !== "resolved" ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ disabled: resolving }}
+                disabled={resolving}
+                onPress={() => void resolveError()}
+                style={({ pressed }) => [styles.resolveButton, (pressed || resolving) && styles.pressed]}>
+                <ThemedText style={styles.resolveButtonText}>
+                  {resolving ? "Resolving..." : "Mark as Resolved"}
+                </ThemedText>
+              </Pressable>
+            ) : null}
           </View>
         ) : (
           <ThemedText style={styles.detail}>Error log not found.</ThemedText>
@@ -57,4 +89,8 @@ const styles = StyleSheet.create({
   title: { color: "#18233A", fontSize: 16, fontWeight: "700" },
   detail: { color: "#536681", fontSize: 12, marginTop: 8 },
   meta: { color: "#536681", fontSize: 11, marginTop: 10 },
+  resolveButton: { alignItems: "center", backgroundColor: "#0AAB83", borderRadius: 10, marginTop: 16, paddingVertical: 10 },
+  resolveButtonText: { color: "#FFFFFF", fontSize: 12, fontWeight: "700" },
+  actionError: { color: "#F04444", fontSize: 11, marginTop: 12 },
+  pressed: { opacity: 0.75 },
 });
