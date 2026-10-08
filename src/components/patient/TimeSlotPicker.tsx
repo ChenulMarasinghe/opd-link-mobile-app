@@ -1,0 +1,119 @@
+import React from 'react';
+import { StyleSheet, Text, View, Pressable } from 'react-native';
+
+interface TimeSlotPickerProps {
+  allSlots: string[];
+  bookedSlots: string[];
+  selectedSlot: string | null;
+  onSelectSlot: (slot: string) => void;
+}
+
+export function TimeSlotPicker({
+  allSlots,
+  bookedSlots,
+  selectedSlot,
+  onSelectSlot,
+}: TimeSlotPickerProps) {
+  return (
+    <View style={styles.container}>
+      <Text style={styles.sectionTitle}>Available Time Slots</Text>
+      {allSlots.length === 0 ? (
+        <Text style={styles.emptyText}>No valid time slots are available for this session.</Text>
+      ) : (
+        <View style={styles.grid}>
+          {allSlots.map((slot) => {
+            const isBooked = bookedSlots.includes(slot);
+            const isSelected = selectedSlot === slot;
+
+            return (
+              <Pressable
+                key={slot}
+                disabled={isBooked}
+                onPress={() => onSelectSlot(slot)}
+                style={[
+                  styles.slotChip,
+                  isBooked && styles.slotBooked,
+                  isSelected && styles.slotSelected,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.slotText,
+                    isBooked && styles.slotTextBooked,
+                    isSelected && styles.slotTextSelected,
+                  ]}
+                >
+                  {slot}
+                </Text>
+                {isBooked && <Text style={styles.bookedTag}>Booked</Text>}
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    marginTop: 8,
+    marginBottom: 14,
+  },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#17243A',
+    marginBottom: 11,
+  },
+  emptyText: {
+    fontSize: 13,
+    color: '#66758C',
+  },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 9,
+  },
+  slotChip: {
+    minHeight: 48,
+    paddingVertical: 9,
+    paddingHorizontal: 10,
+    borderRadius: 11,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#D7E0ED',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: '29%',
+    flexGrow: 1,
+  },
+  slotSelected: {
+    backgroundColor: '#635BFF',
+    borderColor: '#635BFF',
+  },
+  slotBooked: {
+    backgroundColor: '#EEF2F7',
+    borderColor: '#E0E6EF',
+    opacity: 1,
+  },
+  slotText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#34445C',
+  },
+  slotTextSelected: {
+    color: '#FFFFFF',
+  },
+  slotTextBooked: {
+    color: '#8895A8',
+    textDecorationLine: 'line-through',
+  },
+  bookedTag: {
+    fontSize: 9,
+    color: '#EF4444',
+    fontWeight: '700',
+    marginTop: 2,
+    textTransform: 'uppercase',
+  },
+});
