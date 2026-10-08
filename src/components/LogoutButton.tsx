@@ -12,7 +12,7 @@ export default function LogoutButton({
 
   const onLogout = async () => {
     await logout();
-    router.replace("/login");
+    router.replace("/");
   };
 
   return (

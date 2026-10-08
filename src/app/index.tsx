@@ -20,7 +20,9 @@ export default function Index() {
 
   if (loading || !minTimePassed) return <LaunchScreen />;
 
-  if (!user || !profile) return <Redirect href="/login" />;
+  // Login is no longer part of the app flow. Keep the IT dashboard accessible
+  // for the project demo while authenticated users still follow their role.
+  if (!user || !profile) return <Redirect href="/it-dashboard" />;
   if (profile.role === "patient" && profile.emailVerified === false)
     return <Redirect href="/verify-email" />;
   if (profile.role === "admin") return <Redirect href="/admin-dashboard" />;
