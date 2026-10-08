@@ -3,7 +3,7 @@ import { Text, View } from "react-native";
 export default function Screen() {
   return (
     <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-      <Text>maintenance-backup (placeholder)</Text>
+      <Text>select-date-time (placeholder)</Text>
     </View>
   );
 }

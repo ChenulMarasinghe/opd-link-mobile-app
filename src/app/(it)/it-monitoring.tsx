@@ -1,1 +1,9 @@
-export { default } from '../../screens/it/ITMonitoringScreen';
+import { Text, View } from "react-native";
+
+export default function Screen() {
+  return (
+    <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+      <Text>it-monitoring (placeholder)</Text>
+    </View>
+  );
+}
