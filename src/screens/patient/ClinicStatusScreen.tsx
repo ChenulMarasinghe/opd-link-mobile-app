@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from 'expo-router';
 import {
   DoctorClinicStatus,
   subscribeClinicStatus,
@@ -55,6 +56,13 @@ export default function ClinicStatusScreen({ onBack }: ClinicStatusScreenProps) 
   const [doctors, setDoctors] = useState<DoctorClinicStatus[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const listRef = useRef<ScrollView>(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      listRef.current?.scrollTo({ y: 0, animated: false });
+    }, [])
+  );
 
   // Real-time Firestore Listener
   useEffect(() => {
@@ -110,7 +118,7 @@ export default function ClinicStatusScreen({ onBack }: ClinicStatusScreenProps) 
         </View>
       </View>
 
-      <ScrollView style={styles.doctorList} contentContainerStyle={styles.scrollContent}>
+      <ScrollView ref={listRef} style={styles.doctorList} contentContainerStyle={styles.scrollContent}>
         {/* Top Highlight Banner */}
         {highlightedDoctor && (
           <View style={styles.topBannerCard}>

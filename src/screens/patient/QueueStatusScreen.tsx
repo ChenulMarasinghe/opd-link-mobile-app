@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View,
 } from "react-native";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../../context/AuthContext";
 import {
@@ -24,17 +24,23 @@ const clock = (d: Date) =>
 
 export default function QueueStatusScreen() {
   const { user } = useAuth();
-  const params = useLocalSearchParams<{ id?: string }>();
+  const params = useLocalSearchParams<{ id?: string; returnTo?: string; returnId?: string }>();
   const today = useMemo(() => toISODate(new Date()), []);
 
   const [all, setAll] = useState<QueueAppointment[] | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(params.id ?? null);
   const [queue, setQueue] = useState<QueueDoc | null>(null);
   const [queueLoaded, setQueueLoaded] = useState(false);
   const [delay, setDelay] = useState<DelayDoc | null>(null);
   const [updated, setUpdated] = useState<Date | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const notifiedFor = useRef<string | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      scrollRef.current?.scrollTo({ y: 0, animated: false });
+    }, [])
+  );
 
   // today's confirmed appointments
   useEffect(() => {
@@ -54,7 +60,7 @@ export default function QueueStatusScreen() {
     [all, today]
   );
 
-  const appt = todays.find((a) => a.id === selectedId) ?? todays[0] ?? null;
+  const appt = params.id ? todays.find((a) => a.id === params.id) ?? null : null;
   const doctorId = appt?.doctorId;
 
   // live queue + delay for the selected appointment's doctor
@@ -134,7 +140,10 @@ export default function QueueStatusScreen() {
     ]);
   };
 
-  const goBack = () => (router.canGoBack() ? router.back() : router.replace("/dashboard"));
+  const goBack = () =>
+    params.returnTo === "/appointment-details" && params.returnId
+      ? router.replace({ pathname: "/appointment-details", params: { id: params.returnId } })
+      : router.replace("/upcoming-appointments");
 
   // ---- render ----
   const header = (
@@ -181,25 +190,8 @@ export default function QueueStatusScreen() {
       : null;
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+    <ScrollView ref={scrollRef} style={styles.screen} contentContainerStyle={styles.content}>
       {header}
-
-      {/* choose between several appointments today */}
-      {todays.length > 1 && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-          {todays.map((a) => (
-            <Pressable
-              key={a.id}
-              style={[styles.pill, a.id === appt.id && styles.pillActive]}
-              onPress={() => setSelectedId(a.id)}
-            >
-              <Text style={[styles.pillText, a.id === appt.id && styles.pillTextActive]}>
-                {a.timeSlot} · {a.doctorName}
-              </Text>
-            </Pressable>
-          ))}
-        </ScrollView>
-      )}
 
       {/* doctor */}
       <View style={styles.card}>

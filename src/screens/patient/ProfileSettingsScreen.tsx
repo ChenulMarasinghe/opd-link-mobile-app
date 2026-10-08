@@ -6,7 +6,7 @@ import {
     PatientProfileUpdates,
     updatePatientProfile,
 } from '@/services/profileService';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Pressable,
@@ -18,6 +18,8 @@ import {
     View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from 'expo-router';
+import LogoutButton from '../../components/LogoutButton';
 
 const PATIENT_ID = 'patient_demo';
 
@@ -90,6 +92,13 @@ export default function ProfileSettingsScreen({
   const [savingSetting, setSavingSetting] = useState<boolean>(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [retryCount, setRetryCount] = useState<number>(0);
+  const scrollRef = useRef<ScrollView>(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      scrollRef.current?.scrollTo({ y: 0, animated: false });
+    }, [])
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -242,6 +251,7 @@ export default function ProfileSettingsScreen({
       </View>
 
       <ScrollView
+        ref={scrollRef}
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
@@ -396,7 +406,7 @@ export default function ProfileSettingsScreen({
             </View>
 
             <View style={styles.logoutContainer}>
-              <Text style={styles.logoutText}>Log Out</Text>
+              <LogoutButton />
             </View>
 
             {feedback && (

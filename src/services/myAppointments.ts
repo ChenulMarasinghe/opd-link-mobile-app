@@ -1,8 +1,9 @@
 import {
-  collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where,
+  collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, setDoc, where,
 } from "firebase/firestore";
 import { db } from "./firebase";
 import type { Appointment } from "./dashboard";
+import { cancelAppointment as cancelBookedAppointment } from "./bookingService";
 import { nowMinutes, slotToMinutes, toISODate } from "../utils/datetime";
 
 export const isPastAppointment = (a: Appointment) => {
@@ -24,12 +25,8 @@ export function subscribeMyAppointments(
   );
 }
 
-// UPDATE: cancel an appointment
-export const cancelAppointment = (id: string) =>
-  updateDoc(doc(db, "appointments", id), {
-    status: "cancelled",
-    updatedAt: serverTimestamp(),
-  });
+// UPDATE: cancel an appointment and release its reserved time slot
+export const cancelAppointment = (id: string) => cancelBookedAppointment(id);
 
 // DELETE: remove an appointment from history
 export const deleteAppointment = (id: string) => deleteDoc(doc(db, "appointments", id));

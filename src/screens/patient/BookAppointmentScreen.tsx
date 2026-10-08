@@ -11,7 +11,6 @@ import {
 import { auth } from '@/services/firebase';
 import { fetchOpdDepartments, OpdDepartment } from '@/services/opdService';
 import {
-    formatAppointmentDate,
     generateAppointmentSlots,
     formatTimeSlot,
     getAppointmentDates,
@@ -23,8 +22,9 @@ import {
 } from '@/services/appointmentSchedule';
 import { resolvePatientIdentity } from '@/services/patientIdentityService';
 import type { PatientIdentity } from '@/services/patientIdentityService';
+import { router, useFocusEffect } from 'expo-router';
 import { onAuthStateChanged } from 'firebase/auth';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -94,14 +94,9 @@ function getFriendlyAvailabilityError(error: unknown): string {
   return 'We could not load appointment availability. Please try again.';
 }
 
-interface BookAppointmentScreenProps {
-  onViewNotifications?: () => void;
-}
-
-export default function BookAppointmentScreen({
-  onViewNotifications,
-}: BookAppointmentScreenProps = {}) {
+export default function BookAppointmentScreen() {
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4 | 5>(1);
+  const scrollRef = React.useRef<ScrollView>(null);
 
   // Form State
   const [opdDepartments, setOpdDepartments] = useState<OpdDepartment[]>([]);
@@ -348,7 +343,7 @@ export default function BookAppointmentScreen({
     }
   };
 
-  const resetForm = () => {
+  function resetForm() {
     setCurrentStep(1);
     setSelectedDepartment(null);
     setDepartmentExpanded(false);
@@ -362,7 +357,14 @@ export default function BookAppointmentScreen({
     setPatientPhoneError(null);
     setCreatedAppointment(null);
     setErrorMessage(null);
-  };
+  }
+
+  useFocusEffect(
+    useCallback(() => {
+      resetForm();
+      scrollRef.current?.scrollTo({ y: 0, animated: false });
+    }, [])
+  );
 
   // Render the completed booking confirmation.
   if (currentStep === 5) {
@@ -390,42 +392,17 @@ export default function BookAppointmentScreen({
                 <Text style={styles.tokenLabel}>TOKEN NUMBER</Text>
                 <Text style={styles.tokenValue}>{createdAppointment.tokenNumber}</Text>
               </View>
-              <View style={styles.simpleDetailRow}>
-                <Text style={styles.simpleDetailLabel}>Department:</Text>
-                <Text style={styles.simpleDetailValue}>{createdAppointment.opdName}</Text>
-              </View>
-              <View style={styles.simpleDetailRow}>
-                <Text style={styles.simpleDetailLabel}>Doctor:</Text>
-                <Text style={styles.simpleDetailValue}>{createdAppointment.doctorName}</Text>
-              </View>
-              <View style={styles.simpleDetailRow}>
-                <Text style={styles.simpleDetailLabel}>Date:</Text>
-                <Text style={styles.simpleDetailValue}>
-                  {formatAppointmentDate(createdAppointment.date)}
-                </Text>
-              </View>
-              <View style={styles.simpleDetailRow}>
-                <Text style={styles.simpleDetailLabel}>OPD Session:</Text>
-                <Text style={styles.simpleDetailValue}>{createdAppointment.session}</Text>
-              </View>
-              <View style={styles.simpleDetailRow}>
-                <Text style={styles.simpleDetailLabel}>Appointment:</Text>
-                <Text style={styles.simpleDetailValue}>
-                  {createdAppointment.timeSlot} – {createdAppointment.endTime}
-                </Text>
-              </View>
-              <View style={styles.simpleDetailRow}>
-                <Text style={styles.simpleDetailLabel}>Room:</Text>
-                <Text style={styles.simpleDetailValue}>OPD Room {createdAppointment.roomNumber}</Text>
-              </View>
-              <View style={styles.simpleDetailRow}>
-                <Text style={styles.simpleDetailLabel}>Patient:</Text>
-                <Text style={styles.simpleDetailValue}>{createdAppointment.patientName}</Text>
-              </View>
-              <View style={styles.simpleDetailRow}>
-                <Text style={styles.simpleDetailLabel}>Contact:</Text>
-                <Text style={styles.simpleDetailValue}>{createdAppointment.patientPhone}</Text>
-              </View>
+              <Pressable
+                accessibilityRole="link"
+                onPress={() =>
+                  router.push({
+                    pathname: '/appointment-details',
+                    params: { id: createdAppointment.id },
+                  })
+                }
+              >
+                <Text style={styles.detailsLink}>View appointment details</Text>
+              </Pressable>
             </View>
           )}
 
@@ -433,14 +410,12 @@ export default function BookAppointmentScreen({
             <Text style={styles.confirmActionButtonText}>Book Another Appointment</Text>
           </Pressable>
 
-          {onViewNotifications && (
-            <Pressable
-              style={[styles.confirmActionButton, { marginTop: 10 }]}
-              onPress={onViewNotifications}
-            >
-              <Text style={styles.confirmActionButtonText}>View Notifications 🔔</Text>
-            </Pressable>
-          )}
+          <Pressable
+            style={[styles.confirmActionButton, styles.homeButton]}
+            onPress={() => router.replace('/dashboard')}
+          >
+            <Text style={styles.confirmActionButtonText}>Go to Home</Text>
+          </Pressable>
         </View>
       </SafeAreaView>
     );
@@ -478,7 +453,7 @@ export default function BookAppointmentScreen({
         ))}
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView ref={scrollRef} contentContainerStyle={styles.scrollContent}>
         {/* STEP 1: SELECT DEPARTMENT */}
         {currentStep === 1 && (
           <View>
@@ -1415,5 +1390,16 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 13,
     fontWeight: '600',
+  },
+  homeButton: {
+    marginTop: 10,
+    backgroundColor: '#0F8F6B',
+  },
+  detailsLink: {
+    color: '#5148D8',
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'center',
+    textDecorationLine: 'underline',
   },
 });

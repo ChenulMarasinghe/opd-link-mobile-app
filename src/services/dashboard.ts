@@ -12,6 +12,7 @@ export type Appointment = {
   roomNumber?: string;
   date: string; // "YYYY-MM-DD"
   timeSlot: string; // "08:30 AM"
+  tokenNumber?: number;
   status: "confirmed" | "completed" | "cancelled";
 };
 

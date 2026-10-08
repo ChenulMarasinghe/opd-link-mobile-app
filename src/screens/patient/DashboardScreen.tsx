@@ -1,11 +1,10 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View,
 } from "react-native";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../../context/AuthContext";
-import LogoutButton from "../../components/LogoutButton";
 import {
   Appointment, Opd, subscribeOpds, subscribeUpcomingAppointments,
 } from "../../services/dashboard";
@@ -44,7 +43,10 @@ function UpcomingCard({ a }: { a: Appointment }) {
   return (
     <Pressable
       style={styles.card}
-      onPress={() => router.push({ pathname: "/appointment-details", params: { id: a.id } })}
+      onPress={() => router.push({
+        pathname: "/appointment-details",
+        params: { id: a.id, returnTo: "/dashboard" },
+      })}
     >
       <View style={styles.upIcon}>
         <Ionicons name="arrow-up-circle-outline" size={44} color="#7B83F4" />
@@ -101,6 +103,13 @@ export default function DashboardScreen() {
   const [appointments, setAppointments] = useState<Appointment[] | null>(null);
   const [opds, setOpds] = useState<Opd[] | null>(null);
   const [now, setNow] = useState(new Date());
+  const scrollRef = useRef<ScrollView>(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      scrollRef.current?.scrollTo({ y: 0, animated: false });
+    }, [])
+  );
 
   // refresh the open/closed status every minute
   useEffect(() => {
@@ -121,7 +130,7 @@ export default function DashboardScreen() {
   const nowMin = nowMinutes(now);
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+    <ScrollView ref={scrollRef} style={styles.screen} contentContainerStyle={styles.content}>
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.brand}>
@@ -173,10 +182,6 @@ export default function DashboardScreen() {
           <Ionicons name="calendar-outline" size={30} color="#fff" />
           <Text style={styles.actionText}>Book an Appointment</Text>
         </Pressable>
-        <Pressable style={[styles.actionBtn, { backgroundColor: "#5BC8E8" }]} onPress={() => router.push("/queue-status")}>
-          <Ionicons name="ticket-outline" size={30} color="#fff" />
-          <Text style={styles.actionText}>Queue Status</Text>
-        </Pressable>
       </View>
       <View style={styles.actions}>
         <Pressable style={[styles.actionBtn, { backgroundColor: "#0F8F6B" }]} onPress={() => router.push("/upcoming-appointments")}>
@@ -206,8 +211,6 @@ export default function DashboardScreen() {
         )}
       </View>
 
-      {/* TEMPORARY: remove when Profile & Settings has its own Log out */}
-      <LogoutButton />
     </ScrollView>
   );
 }

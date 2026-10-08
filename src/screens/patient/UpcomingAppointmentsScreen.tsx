@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
 } from "react-native";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../../context/AuthContext";
 import type { Appointment } from "../../services/dashboard";
@@ -27,6 +27,13 @@ export default function UpcomingAppointmentsScreen() {
   const [all, setAll] = useState<Appointment[] | null>(null);
   const [ratings, setRatings] = useState<Record<string, number>>({});
   const [now, setNow] = useState(new Date());
+  const listRef = useRef<ScrollView>(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      listRef.current?.scrollTo({ y: 0, animated: false });
+    }, [])
+  );
 
   // rating dialog
   const [rateFor, setRateFor] = useState<Appointment | null>(null);
@@ -108,7 +115,10 @@ export default function UpcomingAppointmentsScreen() {
   };
 
   const openDetails = (a: Appointment) =>
-    router.push({ pathname: "/appointment-details", params: { id: a.id } });
+    router.push({
+      pathname: "/appointment-details",
+      params: { id: a.id, returnTo: "/upcoming-appointments" },
+    });
 
   return (
     <View style={styles.screen}>
@@ -125,7 +135,7 @@ export default function UpcomingAppointmentsScreen() {
         ))}
       </View>
 
-      <ScrollView contentContainerStyle={styles.list}>
+      <ScrollView ref={listRef} contentContainerStyle={styles.list}>
         {all === null ? (
           <ActivityIndicator style={{ marginTop: 40 }} color="#7B83F4" />
         ) : shown.length === 0 ? (

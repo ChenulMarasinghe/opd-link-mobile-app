@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable,
   ScrollView, StyleSheet, Text, TextInput, View,
 } from "react-native";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../../context/AuthContext";
 import {
@@ -41,10 +41,17 @@ function Row({ icon, label, value }: { icon: keyof typeof Ionicons.glyphMap; lab
 
 export default function AppointmentDetailsScreen() {
   const { user } = useAuth();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, returnTo } = useLocalSearchParams<{ id: string; returnTo?: string }>();
   const [appt, setAppt] = useState<AppointmentDetail | null | undefined>(undefined);
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
+  const scrollRef = useRef<ScrollView>(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      scrollRef.current?.scrollTo({ y: 0, animated: false });
+    }, [])
+  );
 
   useEffect(() => {
     if (!id) { setAppt(null); return; }
@@ -56,7 +63,7 @@ export default function AppointmentDetailsScreen() {
   }, [appt?.patientNote]);
 
   const goBack = () =>
-    router.canGoBack() ? router.back() : router.replace("/upcoming-appointments");
+    router.replace(returnTo === "/upcoming-appointments" ? "/upcoming-appointments" : "/dashboard");
 
   // Not found, or belongs to another patient
   if (appt === undefined) {
@@ -123,7 +130,7 @@ export default function AppointmentDetailsScreen() {
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-      <ScrollView style={styles.screen} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <ScrollView ref={scrollRef} style={styles.screen} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         {/* Header */}
         <View style={styles.header}>
           <Pressable onPress={goBack} hitSlop={12}>
@@ -153,7 +160,12 @@ export default function AppointmentDetailsScreen() {
           <Row icon="call-outline" label="Contact number" value={appt.patientPhone} />
           <Row icon="location-outline" label="Room number" value={appt.roomNumber ? `Room ${appt.roomNumber}` : undefined} />
           <Row icon="medkit-outline" label="Doctor" value={appt.doctorName} />
-          <Row icon="document-text-outline" label="Booking reference" value={appt.id.slice(0, 8).toUpperCase()} />
+          <Row
+            icon="ticket-outline"
+            label="Token number"
+            value={typeof appt.tokenNumber === "number" ? String(appt.tokenNumber) : undefined}
+          />
+          <Row icon="document-text-outline" label="Booking Reference ID" value={appt.id} />
           <Row
             icon="time-outline"
             label="Booked on"
@@ -190,7 +202,13 @@ export default function AppointmentDetailsScreen() {
 
         {/* Actions */}
         {isUpcoming && isToday && (
-          <Pressable style={[styles.primaryBtn, { backgroundColor: "#5BC8E8" }]} onPress={() => router.push("/queue-status")}>
+          <Pressable
+            style={[styles.primaryBtn, { backgroundColor: "#5BC8E8" }]}
+            onPress={() => router.push({
+              pathname: "/queue-status",
+              params: { id: appt.id, returnTo: "/appointment-details", returnId: appt.id },
+            })}
+          >
             <Text style={styles.primaryText}>View queue status</Text>
           </Pressable>
         )}

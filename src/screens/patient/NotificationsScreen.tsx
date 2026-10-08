@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   StyleSheet,
   Text,
@@ -9,6 +9,7 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from 'expo-router';
 import {
   PatientNotification,
   subscribeNotifications,
@@ -31,6 +32,13 @@ export default function NotificationsScreen({
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
   const [showNewNotificationMessage, setShowNewNotificationMessage] =
     useState<boolean>(false);
+  const listRef = useRef<ScrollView>(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      listRef.current?.scrollTo({ y: 0, animated: false });
+    }, [])
+  );
 
   // Real-time Firestore Subscription
   useEffect(() => {
@@ -180,7 +188,7 @@ export default function NotificationsScreen({
       </View>
 
       {/* Notifications List */}
-      <ScrollView style={styles.notificationList} contentContainerStyle={styles.scrollContent}>
+      <ScrollView ref={listRef} style={styles.notificationList} contentContainerStyle={styles.scrollContent}>
         {loading ? (
           <ActivityIndicator size="large" color="#6366F1" style={styles.loader} />
         ) : filteredNotifications.length === 0 ? (
