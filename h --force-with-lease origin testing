@@ -1,0 +1,15 @@
+* [33mb3cf3dc[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mtesting[m[33m)[m fix: stabilize patient booking and navigation
+* [33m1d19e62[m feat: connect patient pages to dashboard
+*   [33m22039d6[m Merge pull request #4 from ChenulMarasinghe/feature/rashmi/booking
+[32m|[m[33m\[m  
+[32m|[m *   [33m9273092[m[33m ([m[1;31morigin/feature/rashmi/booking[m[33m)[m Merge remote-tracking branch 'origin/testing' into feature/rashmi/booking
+[32m|[m [34m|[m[32m\[m  
+[32m|[m [34m|[m[32m/[m  
+[32m|[m[32m/[m[34m|[m   
+* [34m|[m   [33m456b908[m Merge pull request #3 from ChenulMarasinghe/feature/chenul/patient-screens
+[36m|[m[1;31m\[m [34m\[m  
+[36m|[m * [34m|[m [33maf15c44[m[33m ([m[1;31morigin/feature/chenul/patient-screens[m[33m)[m Add Appointment Details screen and  Queue Status Screen
+[36m|[m * [34m|[m [33mab40e0f[m Add My Appointments screen with upcoming/past tabs, cancel, rate and delete
+[36m|[m * [34m|[m [33m8d6d589[m Add patient dashboard, tab navigation and OPD availability
+[36m|[m * [34m|[m [33m54fe0af[m Add lunge screen and make css
+[36m|[m * [34m|[m [33mc45e88b[m Add auth, role routing and placeholder routes
