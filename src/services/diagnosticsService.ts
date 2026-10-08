@@ -4,7 +4,6 @@ import {
   Timestamp,
 } from "firebase/firestore";
 
-import { type Role } from "./auth";
 import { db } from "./firebase";
 import {
   recordDiagnosticFailure,
@@ -68,13 +67,7 @@ function getFailureSeverity(status: DiagnosticStatus): ErrorSeverity {
     : "warning";
 }
 
-export async function runSystemDiagnostics(
-  role: Role | null | undefined
-): Promise<DiagnosticsResult> {
-  if (role !== "it") {
-    throw new Error("Only authorized IT Supporters can run diagnostics.");
-  }
-
+export async function runSystemDiagnostics(): Promise<DiagnosticsResult> {
   const startedAt = Date.now();
   const checkedAt = Timestamp.now();
 

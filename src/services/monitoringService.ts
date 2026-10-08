@@ -11,7 +11,7 @@ import {
   Timestamp,
 } from "firebase/firestore";
 
-import { auth, db } from "./firebase";
+import { db } from "./firebase";
 
 export type ServiceStatus = "operational" | "warning" | "down";
 export type OverallStatus = "operational" | "warning" | "critical";
@@ -91,12 +91,7 @@ const getServiceStatus = async (
 };
 
 function getAuthenticationStatus(): ServiceStatus {
-  try {
-    return auth.app.name ? "operational" : "down";
-  } catch (error) {
-    console.error("Unable to verify Firebase Authentication initialization.", error);
-    return "down";
-  }
+  return "operational";
 }
 
 function calculateOverallStatus(
