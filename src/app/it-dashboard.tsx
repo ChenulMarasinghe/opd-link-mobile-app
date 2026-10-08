@@ -1,5 +1,7 @@
 import { SymbolView } from 'expo-symbols';
+import * as Print from 'expo-print';
 import { router } from 'expo-router';
+import * as Sharing from 'expo-sharing';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -34,6 +36,7 @@ export default function ITDashboardScreen() {
   const [dashboardData, setDashboardData] = useState(emptyDashboardData);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const loadDashboardData = useCallback(async (isRefresh = false) => {
@@ -103,6 +106,79 @@ export default function ITDashboardScreen() {
     }
   };
 
+  const exportReport = async () => {
+    if (exporting) return;
+
+    setExporting(true);
+    const health = dashboardData.systemHealth;
+    const generatedAt = new Date().toLocaleString();
+    const activityRows = dashboardData.recentActivities
+      .map(
+        (activity) =>
+          `<tr><td>${escapeHtml(activity.title)}</td><td>${escapeHtml(
+            activity.status.toUpperCase()
+          )}</td><td>${escapeHtml(formatActivityTime(activity.createdAt))}</td></tr>`
+      )
+      .join('');
+    const html = `
+      <!doctype html>
+      <html>
+        <head>
+          <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+          <style>
+            @page { margin: 36px; }
+            body { color: #18233A; font-family: Arial, sans-serif; }
+            .header { background: #EAF4FF; border-radius: 14px; padding: 22px; }
+            h1 { margin: 0 0 6px; font-size: 24px; }
+            .muted { color: #536681; }
+            .status { color: #0AAB83; font-size: 18px; font-weight: bold; }
+            .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 20px; }
+            .metric { border: 1px solid #DDE8F5; border-radius: 10px; padding: 12px; }
+            .label { color: #536681; font-size: 12px; }
+            .value { font-size: 17px; font-weight: bold; margin-top: 5px; }
+            table { border-collapse: collapse; margin-top: 20px; width: 100%; }
+            th, td { border-bottom: 1px solid #DDE8F5; padding: 9px 5px; text-align: left; font-size: 12px; }
+            th { color: #536681; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>OPD Link IT System Report</h1>
+            <div class="muted">Generated ${escapeHtml(generatedAt)}</div>
+            <p class="status">${escapeHtml(health?.overallStatus ?? 'Unavailable')}</p>
+          </div>
+          <div class="grid">
+            <div class="metric"><div class="label">Uptime</div><div class="value">${escapeHtml(health ? `${health.uptimePercentage.toFixed(1)}%` : 'Unavailable')}</div></div>
+            <div class="metric"><div class="label">Critical alerts</div><div class="value">${dashboardData.unresolvedCriticalErrors}</div></div>
+            <div class="metric"><div class="label">Latest backup</div><div class="value">${escapeHtml(dashboardData.latestBackup?.status ?? 'Unavailable')}</div></div>
+            <div class="metric"><div class="label">Latest maintenance</div><div class="value">${escapeHtml(dashboardData.latestMaintenance?.status ?? 'Unavailable')}</div></div>
+          </div>
+          <h2>Recent System Activity</h2>
+          <table>
+            <thead><tr><th>Activity</th><th>Status</th><th>Time</th></tr></thead>
+            <tbody>${activityRows || '<tr><td colspan="3">No recent system activity</td></tr>'}</tbody>
+          </table>
+        </body>
+      </html>`;
+
+    try {
+      const { uri } = await Print.printToFileAsync({ html });
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, {
+          mimeType: 'application/pdf',
+          UTI: '.pdf',
+          dialogTitle: 'Share OPD Link IT System Report',
+        });
+      } else {
+        await Print.printAsync({ html });
+      }
+    } catch (error) {
+      console.error('Unable to generate the IT system PDF report.', error);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <SafeAreaView edges={['top']} style={styles.safeArea}>
       <ScrollView
@@ -133,6 +209,29 @@ export default function ITDashboardScreen() {
           {cards.map((card) => (
             <StatusCard key={card.title} {...card} onPress={() => handleCardPress(card.title)} />
           ))}
+        </View>
+
+        <ThemedText style={styles.sectionTitle}>Quick Actions</ThemedText>
+        <View style={styles.quickActionsCard}>
+          <QuickAction
+            label="Run Diagnostics"
+            icon={{ ios: 'stethoscope', android: 'health_and_safety', web: 'health_and_safety' }}
+            tone="green"
+            onPress={() => router.push({ pathname: '/it-monitoring', params: { runDiagnostics: '1' } })}
+          />
+          <QuickAction
+            label="Refresh Status"
+            icon={{ ios: 'arrow.clockwise', android: 'refresh', web: 'refresh' }}
+            tone="blue"
+            onPress={() => void loadDashboardData(true)}
+          />
+          <QuickAction
+            label={exporting ? 'Generating PDF...' : 'Export PDF'}
+            icon={{ ios: 'doc.text', android: 'description', web: 'description' }}
+            tone="purple"
+            disabled={exporting}
+            onPress={() => void exportReport()}
+          />
         </View>
 
         <ThemedText style={styles.sectionTitle}>Recent System Activity</ThemedText>
@@ -170,6 +269,43 @@ export default function ITDashboardScreen() {
   );
 }
 
+function QuickAction({
+  label,
+  icon,
+  tone,
+  disabled = false,
+  onPress,
+}: {
+  label: string;
+  icon: { ios: 'stethoscope' | 'arrow.clockwise' | 'doc.text'; android: 'health_and_safety' | 'refresh' | 'description'; web: 'health_and_safety' | 'refresh' | 'description' };
+  tone: 'green' | 'blue' | 'purple';
+  disabled?: boolean;
+  onPress: () => void;
+}) {
+  const colors = {
+    green: { background: '#E0FAF3', foreground: '#0AAB83' },
+    blue: { background: '#E8F1FF', foreground: '#1479E8' },
+    purple: { background: '#F0EBFF', foreground: '#6540E8' },
+  }[tone];
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled }}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.quickAction,
+        { backgroundColor: colors.background },
+        pressed && styles.pressed,
+      ]}>
+      <SymbolView name={icon} size={18} tintColor={colors.foreground} />
+      <ThemedText style={[styles.quickActionText, { color: colors.foreground }]}>{label}</ThemedText>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#EAF4FF' },
   content: { paddingHorizontal: 16, paddingTop: 12 },
@@ -182,12 +318,25 @@ const styles = StyleSheet.create({
   operationalSubtitle: { color: '#0AAB83', fontSize: 9, lineHeight: 13 },
   cardList: { gap: 10 },
   sectionTitle: { color: '#18233A', fontSize: 13, lineHeight: 18, fontWeight: '700', marginTop: 12, marginBottom: 7 },
+  quickActionsCard: { flexDirection: 'row', gap: 8, backgroundColor: '#FFFFFF', borderRadius: 16, padding: 8, shadowColor: '#7FA4C9', shadowOpacity: 0.08, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 2 },
+  quickAction: { flex: 1, minHeight: 58, alignItems: 'center', justifyContent: 'center', gap: 5, borderRadius: 11, paddingHorizontal: 4 },
+  quickActionText: { fontSize: 8, lineHeight: 11, fontWeight: '700', textAlign: 'center' },
+  pressed: { opacity: 0.75 },
   activityCard: { backgroundColor: '#FFFFFF', borderRadius: 16, overflow: 'hidden', shadowColor: '#7FA4C9', shadowOpacity: 0.08, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 2 },
   bottomNavigation: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: '#FFFFFF', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#DDE8F5', flexDirection: 'row', justifyContent: 'space-around', paddingTop: 8 },
   navItem: { alignItems: 'center', justifyContent: 'center', minWidth: 64, gap: 3 },
   navLabel: { fontSize: 8, lineHeight: 11 },
   emptyActivity: { color: '#91A0B5', fontSize: 10, padding: 16, textAlign: 'center' },
 });
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
 
 function toActivityItem(activity: SystemActivity): {
   id: string;

@@ -5,7 +5,7 @@ import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-n
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
-import { formatMegabytes, getBackupHistory, getLatestBackup, getNextBackupTime, type BackupRecord } from '@/services/backupService';
+import { formatMegabytes, getBackupHistory, getLatestBackup, getNextBackupTime, simulateBackup, type BackupRecord } from '@/services/backupService';
 import { getCurrentMaintenance, getNextMaintenance, type MaintenanceRecord } from '@/services/maintenanceService';
 
 const navigationItems = [
@@ -24,6 +24,8 @@ export default function MaintenanceScreen() {
   const [nextBackupTime, setNextBackupTime] = useState<Awaited<ReturnType<typeof getNextBackupTime>>>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [backupRunning, setBackupRunning] = useState(false);
+  const [backupError, setBackupError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -52,6 +54,22 @@ export default function MaintenanceScreen() {
       setRefreshing(false);
     }
   }, []);
+
+  const runBackup = useCallback(async () => {
+    if (backupRunning) return;
+
+    setBackupRunning(true);
+    setBackupError(null);
+    try {
+      await simulateBackup();
+      await refresh();
+    } catch (error) {
+      console.error('Unable to run the backup.', error);
+      setBackupError(error instanceof Error ? error.message : 'Backup could not be completed.');
+    } finally {
+      setBackupRunning(false);
+    }
+  }, [backupRunning, refresh]);
 
   useEffect(() => {
     void refresh();
@@ -106,6 +124,16 @@ export default function MaintenanceScreen() {
           <View style={styles.storageHeader}><ThemedText style={styles.muted}>Cloud Storage Allocation</ThemedText><ThemedText style={styles.storageText}>{formatStoragePercentage(backup)}</ThemedText></View>
           <View style={styles.progress}><View style={[styles.progressFill, { width: `${storagePercentage(backup)}%` }]} /></View>
           <View style={styles.storageHeader}><ThemedText style={styles.muted}>{formatMegabytes(backup?.storageUsedMB)} Used</ThemedText><ThemedText style={styles.muted}>{formatMegabytes(backup?.storageLimitMB)} Limit</ThemedText></View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ disabled: backupRunning }}
+            disabled={backupRunning}
+            onPress={() => void runBackup()}
+            style={({ pressed }) => [styles.backupButton, (pressed || backupRunning) && styles.buttonPressed]}>
+            <SymbolView name={{ ios: 'arrow.down.doc', android: 'backup', web: 'backup' }} size={14} tintColor="#FFFFFF" />
+            <ThemedText style={styles.backupButtonText}>{backupRunning ? 'Backup in progress...' : 'Run Backup'}</ThemedText>
+          </Pressable>
+          {backupError ? <ThemedText style={styles.backupError}>{backupError}</ThemedText> : null}
         </View>
 
         <ThemedText style={styles.sectionTitle}>Backup Components</ThemedText>
@@ -184,5 +212,5 @@ function formatStoragePercentage(backup: BackupRecord | null) {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#EAF4FF' }, content: { paddingHorizontal: 12, paddingTop: 10 }, header: { flexDirection: 'row', alignItems: 'center', marginBottom: 13 }, backButton: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#FFF', alignItems: 'center', justifyContent: 'center', marginRight: 10 }, headerCopy: { flex: 1 }, heading: { color: '#18233A', fontSize: 18, fontWeight: '800' }, subtitle: { color: '#43536D', fontSize: 10 }, badge: { color: '#6875FF', backgroundColor: '#E8EBFF', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 5, fontSize: 9, fontWeight: '700' }, card: { backgroundColor: '#FFF', borderRadius: 15, padding: 11, marginBottom: 9 }, statusHeader: { flexDirection: 'row', alignItems: 'center', gap: 9 }, checkCircle: { width: 29, height: 29, borderRadius: 15, backgroundColor: '#DDF8F1', alignItems: 'center', justifyContent: 'center' }, cardTitle: { color: '#18233A', fontSize: 13, fontWeight: '800' }, successText: { color: '#0AAB83', fontSize: 10, marginLeft: 38 }, divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#DDE8F5', marginVertical: 5 }, nextRow: { flexDirection: 'row', justifyContent: 'space-between' }, muted: { color: '#536681', fontSize: 9 }, bold: { color: '#18233A', fontSize: 10, fontWeight: '700' }, note: { color: '#91A0B5', fontSize: 9, fontStyle: 'italic', marginTop: 4 }, cardHeader: { flexDirection: 'row', justifyContent: 'space-between' }, cardLabel: { color: '#43536D', fontSize: 11 }, completedBadge: { color: '#0AAB83', backgroundColor: '#DDF8F1', borderRadius: 5, paddingHorizontal: 7, paddingVertical: 3, fontSize: 8, fontWeight: '700' }, completedIcon: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#DDF8F1', alignSelf: 'center', alignItems: 'center', justifyContent: 'center', marginTop: 8 }, backupTitle: { color: '#18233A', fontSize: 14, fontWeight: '800', textAlign: 'center', marginTop: 4 }, backupTime: { color: '#536681', fontSize: 10, textAlign: 'center' }, statsRow: { flexDirection: 'row', gap: 7, marginTop: 8 }, stat: { flex: 1, backgroundColor: '#F3F6FA', borderRadius: 7, padding: 7, gap: 2 }, storageHeader: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }, storageText: { color: '#6875FF', fontSize: 9 }, progress: { height: 6, backgroundColor: '#E2E8F0', marginTop: 4 }, progressFill: { width: '0%', height: 6, backgroundColor: '#6875FF' }, sectionTitle: { color: '#18233A', fontSize: 14, fontWeight: '700', marginBottom: 7 }, listCard: { backgroundColor: '#FFF', borderRadius: 14, overflow: 'hidden', marginBottom: 9 }, componentRow: { flexDirection: 'row', alignItems: 'center', padding: 8 }, rowBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#DDE8F5' }, componentIcon: { width: 28, height: 28, borderRadius: 8, backgroundColor: '#EEF0FF', alignItems: 'center', justifyContent: 'center', marginRight: 8 }, componentLabel: { color: '#18233A', fontSize: 11, flex: 1 }, componentStatus: { color: '#0AAB83', fontSize: 9 }, historyCard: { backgroundColor: '#FFF', borderRadius: 14, padding: 8, gap: 6 }, historyRow: { flexDirection: 'row', alignItems: 'center' }, historyDot: { color: '#0AAB83', fontSize: 22, width: 16 }, historyCopy: { flex: 1 }, emptyText: { color: '#536681', fontSize: 10, padding: 10, textAlign: 'center' }, refreshButton: { alignSelf: 'flex-end', flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#6875FF', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 7, marginTop: 10 }, refreshText: { color: '#FFF', fontSize: 9, lineHeight: 12, fontWeight: '700' }, bottomNavigation: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: '#FFF', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#DDE8F5', flexDirection: 'row', justifyContent: 'space-around', paddingTop: 8 }, navItem: { alignItems: 'center', minWidth: 64, gap: 3 }, navLabel: { fontSize: 8 },
+  safeArea: { flex: 1, backgroundColor: '#EAF4FF' }, content: { paddingHorizontal: 12, paddingTop: 10 }, header: { flexDirection: 'row', alignItems: 'center', marginBottom: 13 }, backButton: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#FFF', alignItems: 'center', justifyContent: 'center', marginRight: 10 }, headerCopy: { flex: 1 }, heading: { color: '#18233A', fontSize: 18, fontWeight: '800' }, subtitle: { color: '#43536D', fontSize: 10 }, badge: { color: '#6875FF', backgroundColor: '#E8EBFF', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 5, fontSize: 9, fontWeight: '700' }, card: { backgroundColor: '#FFF', borderRadius: 15, padding: 11, marginBottom: 9 }, statusHeader: { flexDirection: 'row', alignItems: 'center', gap: 9 }, checkCircle: { width: 29, height: 29, borderRadius: 15, backgroundColor: '#DDF8F1', alignItems: 'center', justifyContent: 'center' }, cardTitle: { color: '#18233A', fontSize: 13, fontWeight: '800' }, successText: { color: '#0AAB83', fontSize: 10, marginLeft: 38 }, divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#DDE8F5', marginVertical: 5 }, nextRow: { flexDirection: 'row', justifyContent: 'space-between' }, muted: { color: '#536681', fontSize: 9 }, bold: { color: '#18233A', fontSize: 10, fontWeight: '700' }, note: { color: '#91A0B5', fontSize: 9, fontStyle: 'italic', marginTop: 4 }, cardHeader: { flexDirection: 'row', justifyContent: 'space-between' }, cardLabel: { color: '#43536D', fontSize: 11 }, completedBadge: { color: '#0AAB83', backgroundColor: '#DDF8F1', borderRadius: 5, paddingHorizontal: 7, paddingVertical: 3, fontSize: 8, fontWeight: '700' }, completedIcon: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#DDF8F1', alignSelf: 'center', alignItems: 'center', justifyContent: 'center', marginTop: 8 }, backupTitle: { color: '#18233A', fontSize: 14, fontWeight: '800', textAlign: 'center', marginTop: 4 }, backupTime: { color: '#536681', fontSize: 10, textAlign: 'center' }, statsRow: { flexDirection: 'row', gap: 7, marginTop: 8 }, stat: { flex: 1, backgroundColor: '#F3F6FA', borderRadius: 7, padding: 7, gap: 2 }, storageHeader: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }, storageText: { color: '#6875FF', fontSize: 9 }, progress: { height: 6, backgroundColor: '#E2E8F0', marginTop: 4 }, progressFill: { width: '0%', height: 6, backgroundColor: '#6875FF' }, backupButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#6875FF', borderRadius: 10, minHeight: 32, marginTop: 10 }, backupButtonText: { color: '#FFF', fontSize: 9, fontWeight: '700' }, backupError: { color: '#F04444', backgroundColor: '#FFE8E8', borderRadius: 8, padding: 8, fontSize: 9, lineHeight: 12, marginTop: 8 }, buttonPressed: { opacity: 0.75 }, sectionTitle: { color: '#18233A', fontSize: 14, fontWeight: '700', marginBottom: 7 }, listCard: { backgroundColor: '#FFF', borderRadius: 14, overflow: 'hidden', marginBottom: 9 }, componentRow: { flexDirection: 'row', alignItems: 'center', padding: 8 }, rowBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#DDE8F5' }, componentIcon: { width: 28, height: 28, borderRadius: 8, backgroundColor: '#EEF0FF', alignItems: 'center', justifyContent: 'center', marginRight: 8 }, componentLabel: { color: '#18233A', fontSize: 11, flex: 1 }, componentStatus: { color: '#0AAB83', fontSize: 9 }, historyCard: { backgroundColor: '#FFF', borderRadius: 14, padding: 8, gap: 6 }, historyRow: { flexDirection: 'row', alignItems: 'center' }, historyDot: { color: '#0AAB83', fontSize: 22, width: 16 }, historyCopy: { flex: 1 }, emptyText: { color: '#536681', fontSize: 10, padding: 10, textAlign: 'center' }, refreshButton: { alignSelf: 'flex-end', flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#6875FF', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 7, marginTop: 10 }, refreshText: { color: '#FFF', fontSize: 9, lineHeight: 12, fontWeight: '700' }, bottomNavigation: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: '#FFF', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: '#DDE8F5', flexDirection: 'row', justifyContent: 'space-around', paddingTop: 8 }, navItem: { alignItems: 'center', minWidth: 64, gap: 3 }, navLabel: { fontSize: 8 },
 });

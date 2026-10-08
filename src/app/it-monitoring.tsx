@@ -1,4 +1,4 @@
-﻿import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
@@ -27,6 +27,7 @@ const navigationItems = [
 export default function ITMonitoringScreen() {
   const insets = useSafeAreaInsets();
   const { profile } = useAuth();
+  const { runDiagnostics: runDiagnosticsParam } = useLocalSearchParams<{ runDiagnostics?: string }>();
   const [monitoring, setMonitoring] = useState<MonitoringResult | null>(null);
   const [diagnostics, setDiagnostics] = useState<DiagnosticsResult | null>(null);
   const [diagnosticsLoading, setDiagnosticsLoading] = useState(false);
@@ -70,6 +71,12 @@ export default function ITMonitoringScreen() {
       setDiagnosticsLoading(false);
     }
   }, [diagnosticsLoading, profile?.role]);
+
+  useEffect(() => {
+    if (runDiagnosticsParam === '1' && profile?.role === 'it' && !diagnostics && !diagnosticsLoading) {
+      void runDiagnostics();
+    }
+  }, [diagnostics, diagnosticsLoading, profile?.role, runDiagnostics, runDiagnosticsParam]);
 
   const status = monitoring?.overallStatus;
   const statusTitle = status === 'critical' ? 'Critical System Alert' : status === 'warning' ? 'System Warning' : status === 'operational' ? 'All Systems Operational' : 'Checking System Status';
