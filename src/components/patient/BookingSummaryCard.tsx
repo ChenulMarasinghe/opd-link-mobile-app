@@ -1,11 +1,15 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Doctor } from '@/services/bookingService';
+import { formatAppointmentDate } from '@/services/appointmentSchedule';
 
 interface BookingSummaryCardProps {
   doctor: Doctor;
   date: string;
   timeSlot: string;
+  endTime?: string;
+  departmentName?: string;
+  session?: string;
   patientName?: string;
   patientPhone?: string;
 }
@@ -14,14 +18,24 @@ export function BookingSummaryCard({
   doctor,
   date,
   timeSlot,
+  endTime,
+  departmentName,
+  session,
   patientName,
   patientPhone,
 }: BookingSummaryCardProps) {
   return (
     <View style={styles.card}>
-      <Text style={styles.cardTitle}>Appointment Summary</Text>
+      <Text style={styles.cardTitle}>Review Your Appointment</Text>
 
       <View style={styles.divider} />
+
+      {departmentName || doctor.department ? (
+        <View style={styles.row}>
+          <Text style={styles.label}>Department:</Text>
+          <Text style={styles.value}>{departmentName || doctor.department}</Text>
+        </View>
+      ) : null}
 
       <View style={styles.row}>
         <Text style={styles.label}>Doctor:</Text>
@@ -29,23 +43,27 @@ export function BookingSummaryCard({
       </View>
 
       <View style={styles.row}>
-        <Text style={styles.label}>Specialty:</Text>
-        <Text style={styles.value}>{doctor.specialty}</Text>
-      </View>
-
-      <View style={styles.row}>
-        <Text style={styles.label}>Location:</Text>
+        <Text style={styles.label}>Room:</Text>
         <Text style={styles.value}>OPD Room {doctor.roomNumber}</Text>
       </View>
 
       <View style={styles.row}>
         <Text style={styles.label}>Date:</Text>
-        <Text style={styles.value}>{date}</Text>
+        <Text style={styles.value}>{formatAppointmentDate(date)}</Text>
       </View>
 
+      {session ? (
+        <View style={styles.row}>
+          <Text style={styles.label}>OPD Session:</Text>
+          <Text style={styles.value}>{session}</Text>
+        </View>
+      ) : null}
+
       <View style={styles.row}>
-        <Text style={styles.label}>Time Slot:</Text>
-        <Text style={styles.valueBadge}>{timeSlot}</Text>
+        <Text style={styles.label}>Provisional Time:</Text>
+        <Text style={styles.valueBadge}>
+          {endTime ? `${timeSlot} – ${endTime}` : timeSlot}
+        </Text>
       </View>
 
       {patientName ? (

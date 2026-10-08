@@ -1,12 +1,29 @@
 import { BookingSummaryCard } from '@/components/patient/BookingSummaryCard';
 import { DoctorCard } from '@/components/patient/DoctorCard';
-import { TimeSlotPicker } from '@/components/patient/TimeSlotPicker';
 import {
+    BookedAppointmentTime,
+    CreatedAppointment,
     createAppointment,
     Doctor,
     fetchBookedSlots,
     fetchDoctors,
 } from '@/services/bookingService';
+import { auth } from '@/services/firebase';
+import { fetchOpdDepartments, OpdDepartment } from '@/services/opdService';
+import {
+    formatAppointmentDate,
+    generateAppointmentSlots,
+    formatTimeSlot,
+    getAppointmentDates,
+    getDoctorScheduleError,
+    getNextAvailableAppointmentTime,
+    getSessionOverlap,
+    getSriLankaDateTime,
+    parseTimeSlot,
+} from '@/services/appointmentSchedule';
+import { resolvePatientIdentity } from '@/services/patientIdentityService';
+import type { PatientIdentity } from '@/services/patientIdentityService';
+import { onAuthStateChanged } from 'firebase/auth';
 import React, { useEffect, useState } from 'react';
 import {
     ActivityIndicator,
@@ -19,38 +36,6 @@ import {
     View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-
-// Fallback seed doctors for initial demonstration if Firestore is empty
-const MOCK_DOCTORS: Doctor[] = [
-  {
-    id: 'doc_perera',
-    name: 'Dr. K. L. Perera',
-    specialty: 'General OPD',
-    roomNumber: '04',
-  },
-  {
-    id: 'doc_silva',
-    name: 'Dr. N. S. Silva',
-    specialty: 'Cardiology',
-    roomNumber: '02',
-  },
-  {
-    id: 'doc_fernando',
-    name: 'Dr. M. R. Fernando',
-    specialty: 'Pediatrics',
-    roomNumber: '07',
-  },
-  {
-    id: 'doc_jayasinghe',
-    name: 'Dr. S. H. Jayasinghe',
-    specialty: 'Dermatology',
-    roomNumber: '05',
-  },
-];
-
-function getDoctorDepartment(specialty: unknown): string {
-  return typeof specialty === 'string' ? specialty.trim() : '';
-}
 
 function getPatientNameError(name: string): string | null {
   const trimmedName = name.trim();
@@ -69,23 +54,44 @@ function getPatientPhoneError(phone: string): string | null {
   return null;
 }
 
-// Helper to generate upcoming 7 dates starting from today
-function getUpcomingDates(): { fullDate: string; label: string; dayName: string }[] {
-  const dates = [];
-  const today = new Date();
+function getFriendlyBookingError(error: unknown): string {
+  const code = typeof error === 'object' && error !== null && 'code' in error
+    ? String(error.code)
+    : '';
+  const message = error instanceof Error ? error.message : '';
 
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(today);
-    d.setDate(today.getDate() + i);
-
-    const fullDate = d.toISOString().split('T')[0]; // "YYYY-MM-DD"
-    const dayName = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : d.toLocaleDateString('en-US', { weekday: 'short' });
-    const label = `${d.getDate()} ${d.toLocaleDateString('en-US', { month: 'short' })}`;
-
-    dates.push({ fullDate, label, dayName });
+  if (code.includes('permission-denied')) {
+    return __DEV__
+      ? 'This development test profile cannot save bookings in this project. Please ask the project administrator to check access.'
+      : 'We could not save this booking with the current account. Please contact the clinic.';
   }
+  if (code.includes('unavailable') || /network|offline|connection/i.test(message)) {
+    return 'A connection problem prevented the booking. Check your internet connection and try again.';
+  }
+  if (
+    message === 'No appointments available for this session.'
+    || message === 'This OPD is closed or its status is unavailable today.'
+    || message === 'This doctor is no longer accepting appointments.'
+    || message === 'The selected doctor or OPD is no longer available.'
+    || message === 'The selected OPD session is no longer available.'
+    || message === 'The selected date is no longer within the doctor schedule.'
+  ) {
+    return message;
+  }
+  return 'We could not complete this booking. Please try again or choose another session.';
+}
 
-  return dates;
+function getFriendlyAvailabilityError(error: unknown): string {
+  const code = typeof error === 'object' && error !== null && 'code' in error
+    ? String(error.code)
+    : '';
+  if (code.includes('permission-denied')) {
+    return 'We could not check appointment availability. Please try again later or contact the clinic.';
+  }
+  if (code.includes('unavailable')) {
+    return 'A connection problem prevented us from checking availability. Please try again.';
+  }
+  return 'We could not load appointment availability. Please try again.';
 }
 
 interface BookAppointmentScreenProps {
@@ -98,25 +104,29 @@ export default function BookAppointmentScreen({
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3 | 4 | 5>(1);
 
   // Form State
+  const [opdDepartments, setOpdDepartments] = useState<OpdDepartment[]>([]);
+  const [loadingDepartments, setLoadingDepartments] = useState<boolean>(true);
+  const [departmentLoadError, setDepartmentLoadError] = useState<string | null>(null);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [loadingDoctors, setLoadingDoctors] = useState<boolean>(true);
-  const [selectedDepartment, setSelectedDepartment] = useState<string | null>(null);
+  const [doctorLoadError, setDoctorLoadError] = useState<string | null>(null);
+  const [selectedDepartment, setSelectedDepartment] = useState<OpdDepartment | null>(null);
   const [departmentExpanded, setDepartmentExpanded] = useState<boolean>(false);
   const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
+  const [selectedSession, setSelectedSession] = useState<string | null>(null);
+  const filteredDoctors = selectedDepartment
+    ? doctors.filter((doctor) => doctor.department === selectedDepartment.name)
+    : [];
 
-  const departments = Array.from(
-    new Set(doctors.map((doctor) => getDoctorDepartment(doctor.specialty)).filter(Boolean))
-  ).sort((first, second) => first.localeCompare(second));
-  const filteredDoctors = doctors.filter(
-    (doctor) => getDoctorDepartment(doctor.specialty) === selectedDepartment
-  );
+  const availableDates = getAppointmentDates(selectedDoctor);
+  const [selectedDate, setSelectedDate] = useState<string>(getSriLankaDateTime().date);
 
-  const availableDates = getUpcomingDates();
-  const [selectedDate, setSelectedDate] = useState<string>(availableDates[0].fullDate);
-
-  const [bookedSlots, setBookedSlots] = useState<string[]>([]);
+  const [bookedSlots, setBookedSlots] = useState<BookedAppointmentTime[]>([]);
   const [loadingSlots, setLoadingSlots] = useState<boolean>(false);
-  const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
+  const [slotLoadError, setSlotLoadError] = useState<string | null>(null);
+  const [authLoading, setAuthLoading] = useState<boolean>(true);
+  const [patientIdentity, setPatientIdentity] = useState<PatientIdentity | null>(null);
+  const [identityError, setIdentityError] = useState<string | null>(null);
 
   const [patientName, setPatientName] = useState<string>('');
   const [patientPhone, setPatientPhone] = useState<string>('');
@@ -124,54 +134,179 @@ export default function BookAppointmentScreen({
   const [patientPhoneError, setPatientPhoneError] = useState<string | null>(null);
 
   const [submitting, setSubmitting] = useState<boolean>(false);
-  const [createdAppointmentId, setCreatedAppointmentId] = useState<string | null>(null);
+  const [createdAppointment, setCreatedAppointment] = useState<CreatedAppointment | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const doctorScheduleError = getDoctorScheduleError(selectedDoctor);
+  const selectedDateOption = availableDates.find((date) => date.fullDate === selectedDate);
+  const selectedDateAllowed = selectedDateOption?.available === true;
+  const isTodayClosed = selectedDate === getSriLankaDateTime().date
+    && selectedDepartment?.closedToday !== false;
+  const sessionOptions = (selectedDepartment?.sessions || []).map((session) => {
+    const overlaps = getSessionOverlap(session, selectedDoctor);
+    const sessionSlots = selectedDateAllowed && !isTodayClosed
+      ? generateAppointmentSlots(overlaps, selectedDate)
+      : [];
+    const nextSlot = !loadingSlots && !slotLoadError
+      ? getNextAvailableAppointmentTime(sessionSlots, bookedSlots)
+      : null;
+    const disabledReason = isTodayClosed
+      ? 'Closed today'
+      : !selectedDateAllowed
+        ? 'Doctor unavailable on this date'
+        : overlaps.length === 0
+          ? 'Doctor not available in this session'
+          : loadingSlots
+            ? 'Checking availability…'
+            : slotLoadError
+              ? 'Availability could not be checked'
+              : !nextSlot
+                ? selectedDate === getSriLankaDateTime().date
+                  ? 'No appointments remaining today'
+                  : 'Fully booked'
+                : null;
+    return { value: session, overlaps, nextSlot, disabledReason };
+  });
+  const selectedSessionOverlap = sessionOptions.find(
+    (session) => session.value === selectedSession
+  )?.overlaps || [];
+  const availableSlots = selectedDateAllowed && !isTodayClosed
+    ? generateAppointmentSlots(selectedSessionOverlap, selectedDate)
+    : [];
+  const provisionalTimeSlot = selectedSession && !loadingSlots && !slotLoadError
+    ? getNextAvailableAppointmentTime(availableSlots, bookedSlots)
+    : null;
+  const provisionalEndTime = provisionalTimeSlot
+    ? formatTimeSlot((parseTimeSlot(provisionalTimeSlot) ?? 0) + 15)
+    : null;
 
-  // 1. Fetch Doctors on Mount
+  // 1. Fetch OPDs and doctors from Firestore on mount.
   useEffect(() => {
-    async function loadDoctors() {
-      setLoadingDoctors(true);
+    let isMounted = true;
+
+    async function loadDepartments() {
       try {
-        const fetched = await fetchDoctors();
-        if (fetched && fetched.length > 0) {
-          setDoctors(fetched);
-        } else {
-          setDoctors(MOCK_DOCTORS);
+        const fetched = await fetchOpdDepartments();
+        if (isMounted) setOpdDepartments(fetched);
+      } catch (error) {
+        if (isMounted) {
+          setDepartmentLoadError(
+            error instanceof Error ? error.message : 'Failed to load OPD departments.'
+          );
         }
-      } catch (err) {
-        console.log('Using fallback doctors list for testing.');
-        setDoctors(MOCK_DOCTORS);
       } finally {
-        setLoadingDoctors(false);
+        if (isMounted) setLoadingDepartments(false);
       }
     }
 
+    async function loadDoctors() {
+      try {
+        const fetched = await fetchDoctors();
+        if (isMounted) setDoctors(fetched);
+      } catch (error) {
+        if (isMounted) {
+          setDoctorLoadError(
+            error instanceof Error ? error.message : 'Failed to load doctors.'
+          );
+        }
+      } finally {
+        if (isMounted) setLoadingDoctors(false);
+      }
+    }
+
+    loadDepartments();
     loadDoctors();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
-  // 2. Fetch Booked Slots when Doctor or Date changes
+  useEffect(() => {
+    let isMounted = true;
+    let identityRequest = 0;
+    const unsubscribe = onAuthStateChanged(
+      auth,
+      (user) => {
+        const request = ++identityRequest;
+        setAuthLoading(true);
+        setIdentityError(null);
+        void resolvePatientIdentity(user)
+          .then((identity) => {
+            if (isMounted && request === identityRequest) setPatientIdentity(identity);
+          })
+          .catch((error: unknown) => {
+            console.error('Failed to resolve patient identity:', error);
+            if (isMounted && request === identityRequest) {
+              setPatientIdentity(null);
+              setIdentityError(
+                __DEV__
+                  ? 'Could not prepare a local test identity. Please restart the app and try again.'
+                  : 'Please sign in before booking an appointment.'
+              );
+            }
+          })
+          .finally(() => {
+            if (isMounted && request === identityRequest) setAuthLoading(false);
+          });
+      },
+      (error) => {
+        console.error('Failed to resolve Firebase Authentication state:', error);
+        if (isMounted) {
+          identityRequest += 1;
+          setPatientIdentity(null);
+          setIdentityError('We could not verify your sign-in. Please try again.');
+          setAuthLoading(false);
+        }
+      }
+    );
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
+  }, []);
+
+  // 2. Fetch confirmed appointment ranges when Doctor or Date changes.
   useEffect(() => {
     if (!selectedDoctor || !selectedDate) return;
 
+    let isMounted = true;
     async function loadSlots() {
       setLoadingSlots(true);
+      setSlotLoadError(null);
+      setBookedSlots([]);
       try {
         const slots = await fetchBookedSlots(selectedDoctor!.id, selectedDate);
-        setBookedSlots(slots);
+        if (isMounted) setBookedSlots(slots);
       } catch (err) {
         console.error('Failed to load slots:', err);
-        setBookedSlots([]);
+        if (isMounted) {
+          setSlotLoadError(getFriendlyAvailabilityError(err));
+        }
       } finally {
-        setLoadingSlots(false);
+        if (isMounted) setLoadingSlots(false);
       }
     }
 
     loadSlots();
+    return () => {
+      isMounted = false;
+    };
   }, [selectedDoctor, selectedDate]);
 
   // Handle Submit Booking
   const handleConfirmBooking = async () => {
-    if (!selectedDoctor || !selectedDate || !selectedSlot) return;
+    if (
+      !selectedDoctor
+      || !selectedDepartment
+      || !selectedSession
+      || !selectedDate
+      || !provisionalTimeSlot
+    ) return;
+    if (authLoading || !patientIdentity) {
+      setErrorMessage('Please wait while your booking identity is prepared.');
+      return;
+    }
 
     const trimmedName = patientName.trim();
     const nameError = getPatientNameError(patientName);
@@ -187,21 +322,25 @@ export default function BookAppointmentScreen({
     setErrorMessage(null);
 
     try {
-      const appointmentId = await createAppointment({
+      const appointment = await createAppointment({
+        patientId: patientIdentity.patientId,
+        patientIdentityType: patientIdentity.patientIdentityType,
         doctorId: selectedDoctor.id,
         doctorName: selectedDoctor.name,
         specialty: selectedDoctor.specialty,
         roomNumber: selectedDoctor.roomNumber,
         date: selectedDate,
-        timeSlot: selectedSlot,
         patientName: trimmedName,
         patientPhone,
+        opdId: selectedDepartment.id,
+        session: selectedSession,
       });
 
-      setCreatedAppointmentId(appointmentId);
+      setCreatedAppointment(appointment);
       setCurrentStep(5); // Move to Success Screen
-    } catch (err: any) {
-      const msg = err?.message || 'Failed to create appointment. Please try again.';
+    } catch (err) {
+      console.error('Failed to confirm appointment:', err);
+      const msg = getFriendlyBookingError(err);
       setErrorMessage(msg);
       Alert.alert('Booking Error', msg);
     } finally {
@@ -214,17 +353,18 @@ export default function BookAppointmentScreen({
     setSelectedDepartment(null);
     setDepartmentExpanded(false);
     setSelectedDoctor(null);
+    setSelectedDate(getSriLankaDateTime().date);
+    setSelectedSession(null);
     setBookedSlots([]);
-    setSelectedSlot(null);
     setPatientName('');
     setPatientPhone('');
     setPatientNameError(null);
     setPatientPhoneError(null);
-    setCreatedAppointmentId(null);
+    setCreatedAppointment(null);
     setErrorMessage(null);
   };
 
-  // Render Confirmation Ticket (Step 4)
+  // Render the completed booking confirmation.
   if (currentStep === 5) {
     return (
       <SafeAreaView style={styles.container}>
@@ -232,33 +372,59 @@ export default function BookAppointmentScreen({
           <View style={styles.successBadge}>
             <Text style={styles.successCheck}>✓</Text>
           </View>
-          <Text style={styles.successTitle}>Booking Confirmed!</Text>
+          <Text style={styles.successTitle}>Appointment Confirmed</Text>
           <Text style={styles.successSubtitle}>
             Your OPD appointment has been successfully scheduled.
           </Text>
 
-          {createdAppointmentId && (
+          {createdAppointment && (
             <View style={styles.refContainer}>
               <Text style={styles.refLabel}>Booking Reference ID</Text>
-              <Text style={styles.refValue}>{createdAppointmentId}</Text>
+              <Text style={styles.refValue}>{createdAppointment.id}</Text>
             </View>
           )}
 
-          {selectedDoctor && selectedSlot && (
+          {createdAppointment && (
             <View style={styles.simpleDetailsCard}>
-              <View style={styles.simpleDetailRow}>
-                <Text style={styles.simpleDetailLabel}>Doctor:</Text>
-                <Text style={styles.simpleDetailValue}>{selectedDoctor.name}</Text>
+              <View style={styles.tokenCard}>
+                <Text style={styles.tokenLabel}>TOKEN NUMBER</Text>
+                <Text style={styles.tokenValue}>{createdAppointment.tokenNumber}</Text>
               </View>
               <View style={styles.simpleDetailRow}>
-                <Text style={styles.simpleDetailLabel}>Date & Time:</Text>
+                <Text style={styles.simpleDetailLabel}>Department:</Text>
+                <Text style={styles.simpleDetailValue}>{createdAppointment.opdName}</Text>
+              </View>
+              <View style={styles.simpleDetailRow}>
+                <Text style={styles.simpleDetailLabel}>Doctor:</Text>
+                <Text style={styles.simpleDetailValue}>{createdAppointment.doctorName}</Text>
+              </View>
+              <View style={styles.simpleDetailRow}>
+                <Text style={styles.simpleDetailLabel}>Date:</Text>
                 <Text style={styles.simpleDetailValue}>
-                  {selectedDate} • {selectedSlot}
+                  {formatAppointmentDate(createdAppointment.date)}
                 </Text>
               </View>
               <View style={styles.simpleDetailRow}>
-                <Text style={styles.simpleDetailLabel}>Location:</Text>
-                <Text style={styles.simpleDetailValue}>OPD Room {selectedDoctor.roomNumber}</Text>
+                <Text style={styles.simpleDetailLabel}>OPD Session:</Text>
+                <Text style={styles.simpleDetailValue}>{createdAppointment.session}</Text>
+              </View>
+              <View style={styles.simpleDetailRow}>
+                <Text style={styles.simpleDetailLabel}>Appointment:</Text>
+                <Text style={styles.simpleDetailValue}>
+                  {createdAppointment.timeSlot} – {createdAppointment.endTime}
+                </Text>
+              </View>
+              <View style={styles.simpleDetailRow}>
+                <Text style={styles.simpleDetailLabel}>Room:</Text>
+                <Text style={styles.simpleDetailValue}>OPD Room {createdAppointment.roomNumber}</Text>
+              </View>
+              <View style={styles.simpleDetailRow}>
+                <Text style={styles.simpleDetailLabel}>Patient:</Text>
+                <Text style={styles.simpleDetailValue}>{createdAppointment.patientName}</Text>
+              </View>
+              <View style={styles.simpleDetailRow}>
+                <Text style={styles.simpleDetailLabel}>Contact:</Text>
+                <Text style={styles.simpleDetailValue}>{createdAppointment.patientPhone}</Text>
               </View>
             </View>
           )}
@@ -290,7 +456,7 @@ export default function BookAppointmentScreen({
 
       {/* Step Indicator */}
       <View style={styles.stepIndicatorContainer}>
-        {['Department', 'Doctor', 'Date & Slot', 'Confirm'].map((label, index) => (
+        {['Department', 'Doctor', 'Date & Session', 'Confirm'].map((label, index) => (
           <React.Fragment key={label}>
             <View style={styles.stepItem}>
               <Text style={[styles.stepNumber, currentStep >= index + 1 && styles.stepNumberActive]}>
@@ -319,15 +485,20 @@ export default function BookAppointmentScreen({
             <Text style={styles.stepHeader}>Select Department</Text>
             <Text style={styles.stepSubheader}>Choose a department to see its doctors</Text>
 
-            {loadingDoctors && (
+            {loadingDepartments && (
               <ActivityIndicator size="large" color="#208AEF" style={{ marginVertical: 30 }} />
             )}
-            {!loadingDoctors && departments.length === 0 && (
+            {!loadingDepartments && departmentLoadError && (
               <View style={styles.departmentEmptyCard}>
-                <Text style={styles.departmentEmptyText}>No departments are available right now.</Text>
+                <Text style={styles.departmentEmptyText}>{departmentLoadError}</Text>
               </View>
             )}
-            {!loadingDoctors && departments.length > 0 && (
+            {!loadingDepartments && !departmentLoadError && opdDepartments.length === 0 && (
+              <View style={styles.departmentEmptyCard}>
+                <Text style={styles.departmentEmptyText}>No OPD departments are available right now.</Text>
+              </View>
+            )}
+            {!loadingDepartments && !departmentLoadError && opdDepartments.length > 0 && (
               <View style={styles.departmentCard}>
                 <Pressable
                   style={[
@@ -343,7 +514,7 @@ export default function BookAppointmentScreen({
                   <View style={styles.departmentDropdownText}>
                     <Text style={styles.departmentLabel}>DEPARTMENT</Text>
                     <Text style={selectedDepartment ? styles.departmentValue : styles.departmentPlaceholder}>
-                      {selectedDepartment || 'Choose a department'}
+                      {selectedDepartment?.name || 'Choose a department'}
                     </Text>
                   </View>
                   <Text style={styles.departmentChevron}>{departmentExpanded ? '⌃' : '⌄'}</Text>
@@ -351,31 +522,36 @@ export default function BookAppointmentScreen({
 
                 {departmentExpanded && (
                   <View style={styles.departmentOptions}>
-                    {departments.map((department) => (
+                    {opdDepartments.map((department) => (
                       <Pressable
-                        key={department}
+                        key={department.id}
                         style={[
                           styles.departmentOption,
-                          selectedDepartment === department && styles.departmentOptionSelected,
+                          selectedDepartment?.id === department.id && styles.departmentOptionSelected,
                         ]}
                         onPress={() => {
                           setSelectedDepartment(department);
                           setDepartmentExpanded(false);
                           setSelectedDoctor(null);
+                          setSelectedDate(getSriLankaDateTime().date);
+                          setSelectedSession(null);
                           setBookedSlots([]);
-                          setSelectedSlot(null);
                         }}
                       >
                         <Text
                           style={[
                             styles.departmentOptionText,
-                            selectedDepartment === department && styles.departmentOptionTextSelected,
+                            selectedDepartment?.id === department.id && styles.departmentOptionTextSelected,
                           ]}
                         >
-                          {department}
+                          {department.name}
                         </Text>
                         <Text style={styles.departmentDoctorCount}>
-                          {doctors.filter((doctor) => doctor.specialty === department).length} doctors
+                          {department.closedToday === true
+                            ? 'Closed today'
+                            : department.closedToday === false
+                              ? 'Open today'
+                              : "Today's status unavailable"}
                         </Text>
                       </Pressable>
                     ))}
@@ -384,7 +560,11 @@ export default function BookAppointmentScreen({
 
                 {selectedDepartment && (
                   <Text style={styles.departmentHint}>
-                    {filteredDoctors.length} {filteredDoctors.length === 1 ? 'doctor' : 'doctors'} available
+                    {selectedDepartment.closedToday === true
+                      ? 'This OPD is closed today. Its future-day availability is not determined by this flag.'
+                      : selectedDepartment.closedToday === false
+                        ? 'This OPD is open today.'
+                        : "Today's OPD status is unavailable."}
                   </Text>
                 )}
 
@@ -397,11 +577,17 @@ export default function BookAppointmentScreen({
         {currentStep === 2 && selectedDepartment && (
           <View>
             <Text style={styles.stepHeader}>Select a Doctor</Text>
-            <Text style={styles.stepSubheader}>Choose an OPD specialist in {selectedDepartment}</Text>
+            <Text style={styles.stepSubheader}>Choose a doctor for {selectedDepartment.name}</Text>
 
-            {filteredDoctors.length === 0 ? (
+            {loadingDoctors ? (
+              <ActivityIndicator size="large" color="#208AEF" style={{ marginVertical: 30 }} />
+            ) : doctorLoadError ? (
               <View style={styles.departmentEmptyCard}>
-                <Text style={styles.departmentEmptyText}>No doctors are listed for this department.</Text>
+                <Text style={styles.departmentEmptyText}>{doctorLoadError}</Text>
+              </View>
+            ) : filteredDoctors.length === 0 ? (
+              <View style={styles.departmentEmptyCard}>
+                <Text style={styles.departmentEmptyText}>No doctors available for this OPD.</Text>
               </View>
             ) : (
               filteredDoctors.map((doctor) => (
@@ -409,70 +595,186 @@ export default function BookAppointmentScreen({
                   key={doctor.id}
                   doctor={doctor}
                   isSelected={selectedDoctor?.id === doctor.id}
-                  onSelect={(doc) => setSelectedDoctor(doc)}
+                  onSelect={(selectedDoctor) => {
+                    setSelectedDoctor(selectedDoctor);
+                    const firstAvailableDate = getAppointmentDates(selectedDoctor)
+                      .find((date) => date.available);
+                    setSelectedDate(firstAvailableDate?.fullDate || getSriLankaDateTime().date);
+                    setSelectedSession(null);
+                    setBookedSlots([]);
+                  }}
                 />
               ))
             )}
           </View>
         )}
 
-        {/* STEP 3: SELECT DATE & TIME SLOT */}
+        {/* STEP 3: SELECT DATE & OPD SESSION */}
         {currentStep === 3 && selectedDoctor && (
           <View>
-            <Text style={styles.stepHeader}>Select Date & Time</Text>
+            <Text style={styles.stepHeader}>Select Date & Session</Text>
             <Text style={styles.stepSubheader}>
               Appointment with {selectedDoctor.name} ({selectedDoctor.specialty})
             </Text>
 
-            {/* Date Selection Strip */}
-            <Text style={styles.fieldLabel}>Select Date</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.dateStrip}>
-              {availableDates.map((item) => {
-                const isSelected = selectedDate === item.fullDate;
-                return (
-                  <Pressable
-                    key={item.fullDate}
-                    style={[styles.dateChip, isSelected && styles.dateChipSelected]}
-                    onPress={() => {
-                      setSelectedDate(item.fullDate);
-                      setSelectedSlot(null);
-                    }}
-                  >
-                    <Text style={[styles.dayText, isSelected && styles.dateTextSelected]}>
-                      {item.dayName}
-                    </Text>
-                    <Text style={[styles.dateLabel, isSelected && styles.dateTextSelected]}>
-                      {item.label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-
-            {/* Time Slot Picker */}
-            {loadingSlots ? (
-              <ActivityIndicator size="small" color="#208AEF" style={{ marginVertical: 20 }} />
+            <Text style={styles.fieldLabel}>Select Appointment Date</Text>
+            {doctorScheduleError ? (
+              <Text style={styles.scheduleMessage}>{doctorScheduleError}</Text>
             ) : (
-              <TimeSlotPicker
-                bookedSlots={bookedSlots}
-                selectedSlot={selectedSlot}
-                onSelectSlot={(slot) => setSelectedSlot(slot)}
-              />
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.dateStrip}>
+                {availableDates.map((item) => {
+                  const isSelected = selectedDate === item.fullDate;
+                  const closedToday = item.fullDate === getSriLankaDateTime().date
+                    && selectedDepartment?.closedToday !== false;
+                  const isAvailable = item.available && !closedToday;
+                  return (
+                    <Pressable
+                      key={item.fullDate}
+                      disabled={!isAvailable}
+                      style={[
+                        styles.dateChip,
+                        isSelected && styles.dateChipSelected,
+                        !isAvailable && styles.dateChipUnavailable,
+                      ]}
+                      onPress={() => {
+                        setSelectedDate(item.fullDate);
+                        setSelectedSession(null);
+                      }}
+                    >
+                      <Text style={[
+                        styles.dayText,
+                        isSelected && isAvailable && styles.dateTextSelected,
+                        !isAvailable && styles.dateTextUnavailable,
+                      ]}>
+                        {item.dayName}
+                      </Text>
+                      <Text style={[
+                        styles.dateLabel,
+                        isSelected && isAvailable && styles.dateTextSelected,
+                        !isAvailable && styles.dateTextUnavailable,
+                      ]}>
+                        {item.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+            )}
+            {isTodayClosed && (
+              <Text style={styles.scheduleMessage}>
+                This OPD is closed or its current-day status is unavailable. Choose a future date.
+              </Text>
+            )}
+            {!doctorScheduleError && !selectedDateAllowed && !isTodayClosed && (
+              <Text style={styles.scheduleMessage}>
+                The doctor is not available on the selected date or has not started consulting yet.
+              </Text>
+            )}
+
+            <Text style={styles.fieldLabel}>Choose OPD Session</Text>
+            {sessionOptions.length === 0 ? (
+              <Text style={styles.scheduleMessage}>No OPD sessions are configured.</Text>
+            ) : (
+              <View style={styles.sessionList}>
+                {sessionOptions.map(({ value, disabledReason, nextSlot }) => {
+                  const sessionUnavailable = disabledReason !== null;
+                  const isSelected = selectedSession === value;
+                  return (
+                    <Pressable
+                      key={value}
+                      disabled={sessionUnavailable}
+                      onPress={() => {
+                        setSelectedSession(value);
+                      }}
+                      style={[
+                        styles.sessionOption,
+                        isSelected && styles.sessionOptionSelected,
+                        sessionUnavailable && styles.sessionOptionUnavailable,
+                      ]}
+                    >
+                      <Text style={[
+                        styles.sessionOptionText,
+                        isSelected && styles.sessionOptionTextSelected,
+                        sessionUnavailable && styles.sessionOptionTextUnavailable,
+                      ]}>
+                        {value}
+                      </Text>
+                      <Text style={[
+                        styles.sessionHint,
+                        sessionUnavailable && styles.sessionHintUnavailable,
+                      ]}>
+                        {disabledReason || `Next available: ${nextSlot}`}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+
+            <Text style={styles.fieldLabel}>Your Suggested Appointment Time</Text>
+            {slotLoadError ? (
+              <Text style={styles.scheduleMessage}>{slotLoadError}</Text>
+            ) : loadingSlots ? (
+              <ActivityIndicator size="small" color="#208AEF" style={{ marginVertical: 20 }} />
+            ) : selectedSession && provisionalTimeSlot ? (
+              <View style={styles.selectionDetails}>
+                <Text style={styles.selectionDetailsText}>
+                  Next available: {provisionalTimeSlot}
+                </Text>
+                <Text style={styles.scheduleMessage}>
+                  This time is provisional and will be checked again when you confirm.
+                </Text>
+              </View>
+            ) : selectedSession ? (
+              <Text style={styles.scheduleMessage}>
+                No appointments available for this session.
+              </Text>
+            ) : (
+              <Text style={styles.scheduleMessage}>
+                Select a date and an available session to see the next appointment time.
+              </Text>
             )}
           </View>
         )}
 
         {/* STEP 4: REVIEW & CONFIRM */}
-        {currentStep === 4 && selectedDoctor && selectedSlot && (
+        {currentStep === 4 && selectedDoctor && (
           <View>
             <Text style={styles.stepHeader}>Review & Confirm</Text>
             <Text style={styles.stepSubheader}>Please verify your details before booking</Text>
 
-            <BookingSummaryCard
-              doctor={selectedDoctor}
-              date={selectedDate}
-              timeSlot={selectedSlot}
-            />
+            {provisionalTimeSlot ? (
+              <>
+                <Text style={styles.provisionalNotice}>
+                  Your suggested time is provisional. We will assign the final time and token when you confirm.
+                </Text>
+                <BookingSummaryCard
+                  doctor={selectedDoctor}
+                  date={selectedDate}
+                  timeSlot={provisionalTimeSlot}
+                  endTime={provisionalEndTime || undefined}
+                  departmentName={selectedDepartment?.name}
+                  session={selectedSession || undefined}
+                  patientName={patientName.trim()}
+                  patientPhone={patientPhone}
+                />
+              </>
+            ) : (
+              <Text style={styles.scheduleMessage}>
+                No appointments available for this session. Choose another date or session.
+              </Text>
+            )}
+            {authLoading ? (
+              <ActivityIndicator size="small" color="#208AEF" style={{ marginVertical: 12 }} />
+            ) : !patientIdentity ? (
+              <Text style={styles.scheduleMessage}>
+                {identityError || 'Please sign in before booking an appointment.'}
+              </Text>
+            ) : patientIdentity.patientIdentityType === 'dev_guest' ? (
+              <Text style={styles.scheduleMessage}>
+                You are using a local development guest profile for testing.
+              </Text>
+            ) : null}
 
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Patient Full Name *</Text>
@@ -526,7 +828,9 @@ export default function BookAppointmentScreen({
         {currentStep > 1 && (
           <Pressable
             style={styles.secondaryButton}
-            onPress={() => setCurrentStep((prev) => (prev - 1) as any)}
+            onPress={() => setCurrentStep((prev) =>
+              prev === 5 ? 4 : prev === 4 ? 3 : prev === 3 ? 2 : 1
+            )}
             disabled={submitting}
           >
             <Text style={styles.secondaryButtonText}>Back</Text>
@@ -535,8 +839,8 @@ export default function BookAppointmentScreen({
 
         {currentStep === 1 && (
           <Pressable
-            style={[styles.primaryButton, !selectedDepartment && styles.buttonDisabled]}
-            disabled={!selectedDepartment}
+            style={[styles.primaryButton, (!selectedDepartment || loadingDepartments) && styles.buttonDisabled]}
+            disabled={!selectedDepartment || loadingDepartments}
             onPress={() => setCurrentStep(2)}
           >
             <Text style={styles.primaryButtonText}>Next: Select Doctor</Text>
@@ -545,18 +849,18 @@ export default function BookAppointmentScreen({
 
         {currentStep === 2 && (
           <Pressable
-            style={[styles.primaryButton, !selectedDoctor && styles.buttonDisabled]}
-            disabled={!selectedDoctor}
+            style={[styles.primaryButton, (!selectedDoctor || loadingDoctors || !!doctorLoadError) && styles.buttonDisabled]}
+            disabled={!selectedDoctor || loadingDoctors || !!doctorLoadError}
             onPress={() => setCurrentStep(3)}
           >
-            <Text style={styles.primaryButtonText}>Next: Select Date & Time</Text>
+            <Text style={styles.primaryButtonText}>Next: Date & Session</Text>
           </Pressable>
         )}
 
         {currentStep === 3 && (
           <Pressable
-            style={[styles.primaryButton, !selectedSlot && styles.buttonDisabled]}
-            disabled={!selectedSlot}
+            style={[styles.primaryButton, !provisionalTimeSlot && styles.buttonDisabled]}
+            disabled={!provisionalTimeSlot}
             onPress={() => setCurrentStep(4)}
           >
             <Text style={styles.primaryButtonText}>Next: Review Details</Text>
@@ -565,14 +869,18 @@ export default function BookAppointmentScreen({
 
         {currentStep === 4 && (
           <Pressable
-            style={[styles.primaryButton, submitting && styles.buttonDisabled]}
-            disabled={submitting}
+            style={[
+              styles.primaryButton,
+              (submitting || authLoading || !patientIdentity || !provisionalTimeSlot)
+                && styles.buttonDisabled,
+            ]}
+            disabled={submitting || authLoading || !patientIdentity || !provisionalTimeSlot}
             onPress={handleConfirmBooking}
           >
             {submitting ? (
               <ActivityIndicator size="small" color="#FFFFFF" />
             ) : (
-              <Text style={styles.primaryButtonText}>Confirm Appointment</Text>
+              <Text style={styles.primaryButtonText}>Confirm Booking</Text>
             )}
           </Pressable>
         )}
@@ -771,6 +1079,37 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#66758C',
   },
+  scheduleMessage: {
+    marginBottom: 12,
+    fontSize: 12,
+    lineHeight: 18,
+    color: '#64748B',
+  },
+  provisionalNotice: {
+    marginBottom: 12,
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: '#EEF2FF',
+    color: '#4338CA',
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '600',
+  },
+  selectionDetails: {
+    marginTop: -8,
+    marginBottom: 18,
+    padding: 14,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E0E8F4',
+  },
+  selectionDetailsText: {
+    fontSize: 13,
+    lineHeight: 20,
+    color: '#334155',
+    fontWeight: '600',
+  },
   departmentEmptyCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
@@ -809,6 +1148,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#635BFF',
     borderColor: '#635BFF',
   },
+  dateChipUnavailable: {
+    backgroundColor: '#F1F5F9',
+    borderColor: '#E2E8F0',
+    elevation: 0,
+    shadowOpacity: 0,
+  },
   dayText: {
     fontSize: 11,
     fontWeight: '600',
@@ -822,6 +1167,48 @@ const styles = StyleSheet.create({
   },
   dateTextSelected: {
     color: '#FFFFFF',
+  },
+  dateTextUnavailable: {
+    color: '#94A3B8',
+  },
+  sessionList: {
+    gap: 8,
+    marginBottom: 16,
+  },
+  sessionOption: {
+    paddingHorizontal: 13,
+    paddingVertical: 11,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: '#D7E0ED',
+    backgroundColor: '#FFFFFF',
+  },
+  sessionOptionSelected: {
+    borderColor: '#635BFF',
+    backgroundColor: '#F3F2FF',
+  },
+  sessionOptionUnavailable: {
+    backgroundColor: '#F1F5F9',
+    borderColor: '#E2E8F0',
+  },
+  sessionOptionText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#334155',
+  },
+  sessionOptionTextSelected: {
+    color: '#5148D8',
+  },
+  sessionOptionTextUnavailable: {
+    color: '#94A3B8',
+  },
+  sessionHint: {
+    marginTop: 3,
+    fontSize: 11,
+    color: '#66758C',
+  },
+  sessionHintUnavailable: {
+    color: '#94A3B8',
   },
   inputGroup: {
     marginBottom: 16,
@@ -979,6 +1366,26 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 5,
     elevation: 1,
+  },
+  tokenCard: {
+    alignItems: 'center',
+    alignSelf: 'stretch',
+    paddingVertical: 12,
+    marginBottom: 5,
+    borderRadius: 12,
+    backgroundColor: '#EEF2FF',
+  },
+  tokenLabel: {
+    fontSize: 11,
+    color: '#5148D8',
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
+  tokenValue: {
+    marginTop: 2,
+    fontSize: 28,
+    color: '#5148D8',
+    fontWeight: '800',
   },
   simpleDetailRow: {
     flexDirection: 'row',

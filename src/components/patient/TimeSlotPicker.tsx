@@ -2,29 +2,14 @@ import React from 'react';
 import { StyleSheet, Text, View, Pressable } from 'react-native';
 
 interface TimeSlotPickerProps {
-  allSlots?: string[];
+  allSlots: string[];
   bookedSlots: string[];
   selectedSlot: string | null;
   onSelectSlot: (slot: string) => void;
 }
 
-const DEFAULT_SLOTS = [
-  '08:30 AM',
-  '08:45 AM',
-  '09:00 AM',
-  '09:15 AM',
-  '09:30 AM',
-  '09:45 AM',
-  '10:00 AM',
-  '10:15 AM',
-  '10:30 AM',
-  '10:45 AM',
-  '11:00 AM',
-  '11:15 AM',
-];
-
 export function TimeSlotPicker({
-  allSlots = DEFAULT_SLOTS,
+  allSlots,
   bookedSlots,
   selectedSlot,
   onSelectSlot,
@@ -32,36 +17,40 @@ export function TimeSlotPicker({
   return (
     <View style={styles.container}>
       <Text style={styles.sectionTitle}>Available Time Slots</Text>
-      <View style={styles.grid}>
-        {allSlots.map((slot) => {
-          const isBooked = bookedSlots.includes(slot);
-          const isSelected = selectedSlot === slot;
+      {allSlots.length === 0 ? (
+        <Text style={styles.emptyText}>No valid time slots are available for this session.</Text>
+      ) : (
+        <View style={styles.grid}>
+          {allSlots.map((slot) => {
+            const isBooked = bookedSlots.includes(slot);
+            const isSelected = selectedSlot === slot;
 
-          return (
-            <Pressable
-              key={slot}
-              disabled={isBooked}
-              onPress={() => onSelectSlot(slot)}
-              style={[
-                styles.slotChip,
-                isBooked && styles.slotBooked,
-                isSelected && styles.slotSelected,
-              ]}
-            >
-              <Text
+            return (
+              <Pressable
+                key={slot}
+                disabled={isBooked}
+                onPress={() => onSelectSlot(slot)}
                 style={[
-                  styles.slotText,
-                  isBooked && styles.slotTextBooked,
-                  isSelected && styles.slotTextSelected,
+                  styles.slotChip,
+                  isBooked && styles.slotBooked,
+                  isSelected && styles.slotSelected,
                 ]}
               >
-                {slot}
-              </Text>
-              {isBooked && <Text style={styles.bookedTag}>Booked</Text>}
-            </Pressable>
-          );
-        })}
-      </View>
+                <Text
+                  style={[
+                    styles.slotText,
+                    isBooked && styles.slotTextBooked,
+                    isSelected && styles.slotTextSelected,
+                  ]}
+                >
+                  {slot}
+                </Text>
+                {isBooked && <Text style={styles.bookedTag}>Booked</Text>}
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
     </View>
   );
 }
@@ -76,6 +65,10 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#17243A',
     marginBottom: 11,
+  },
+  emptyText: {
+    fontSize: 13,
+    color: '#66758C',
   },
   grid: {
     flexDirection: 'row',
