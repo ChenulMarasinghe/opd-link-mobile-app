@@ -171,9 +171,6 @@ export default function UpcomingAppointmentsScreen() {
                     <Pressable style={[styles.smallBtn, styles.outlineBtn]} onPress={() => openDetails(a)}>
                       <Text style={styles.outlineText}>View details</Text>
                     </Pressable>
-                    <Pressable style={[styles.smallBtn, styles.dangerBtn]} onPress={() => onCancel(a)}>
-                      <Text style={styles.dangerText}>Cancel</Text>
-                    </Pressable>
                   </View>
                 ) : (
                   <View style={styles.actions}>
