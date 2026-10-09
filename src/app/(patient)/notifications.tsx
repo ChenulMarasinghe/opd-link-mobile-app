@@ -1,9 +1,14 @@
-import { Text, View } from "react-native";
+import { router } from "expo-router";
+import { useAuth } from "../../context/AuthContext";
+import NotificationsScreen from "../../screens/patient/NotificationsScreen";
 
-export default function Screen() {
+export default function NotificationsRoute() {
+  const { user } = useAuth();
+
   return (
-    <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-      <Text>notifications (placeholder)</Text>
-    </View>
+    <NotificationsScreen
+      patientId={user?.uid}
+      onBack={() => router.replace("/(patient)/dashboard")}
+    />
   );
 }

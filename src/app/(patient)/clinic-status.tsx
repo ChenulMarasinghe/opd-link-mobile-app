@@ -1,9 +1,6 @@
-import { Text, View } from "react-native";
+import { router } from "expo-router";
+import ClinicStatusScreen from "../../screens/patient/ClinicStatusScreen";
 
-export default function Screen() {
-  return (
-    <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-      <Text>clinic-status (placeholder)</Text>
-    </View>
-  );
+export default function ClinicStatusRoute() {
+  return <ClinicStatusScreen onBack={() => router.replace("/(patient)/dashboard")} />;
 }

@@ -52,6 +52,13 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
   return snap.exists() ? (snap.data() as UserProfile) : null;
 }
 
+export async function updateUserProfile(uid: string, updates: Pick<UserProfile, 'name' | 'phone'>) {
+  await setDoc(doc(db, 'users', uid), {
+    ...updates,
+    updatedAt: serverTimestamp(),
+  }, { merge: true });
+}
+
 export const logoutUser = () => signOut(auth);
 export const resetPassword = (email: string) =>
   sendPasswordResetEmail(auth, email.trim());

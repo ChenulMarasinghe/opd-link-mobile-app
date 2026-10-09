@@ -25,18 +25,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-  return onAuthStateChanged(auth, async (u) => {
-    if (u) {
+    return onAuthStateChanged(auth, async (u) => {
       setLoading(true);
-      const p = await getUserProfile(u.uid);
       setUser(u);
-      setProfile(p);
-    } else {
-      setUser(null);
-      setProfile(null);
-    }
-    setLoading(false);
-  });
+      try {
+        setProfile(u ? await getUserProfile(u.uid) : null);
+      } catch (error) {
+        console.error('Unable to load signed-in user profile.', error);
+        setProfile(null);
+      } finally {
+        setLoading(false);
+      }
+    });
   }, []);
 
   const refreshProfile = async () => {
