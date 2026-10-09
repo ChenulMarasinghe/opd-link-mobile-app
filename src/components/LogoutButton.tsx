@@ -30,7 +30,10 @@ export default function LogoutButton({
     await logout();
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 >>>>>>> parent of 1bdecc6 (refactor: structure app around IT screens)
+=======
+>>>>>>> parent of a5adae6 (remove login)
 =======
 >>>>>>> parent of a5adae6 (remove login)
 =======
