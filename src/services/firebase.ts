@@ -1,5 +1,9 @@
 import { initializeApp } from "firebase/app";
+<<<<<<< HEAD
 import { initializeAuth } from "firebase/auth";
+=======
+import { getAuth } from "firebase/auth";
+>>>>>>> parent of 1bdecc6 (refactor: structure app around IT screens)
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
@@ -24,5 +28,9 @@ if (missingConfig.length > 0) {
 }
 
 const app = initializeApp(firebaseConfig);
+<<<<<<< HEAD
 export const auth = initializeAuth(app);
+=======
+export const auth = getAuth(app);
+>>>>>>> parent of 1bdecc6 (refactor: structure app around IT screens)
 export const db = getFirestore(app);

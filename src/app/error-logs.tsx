@@ -140,7 +140,7 @@ export default function ErrorLogsScreen() {
         <NavItem label="Dashboard" icon={{ ios: 'house.fill', android: 'home', web: 'home' }} onPress={() => router.replace('/it-dashboard')} />
         <NavItem label="Monitoring" icon={{ ios: 'waveform.path.ecg', android: 'monitor_heart', web: 'monitor_heart' }} onPress={() => router.replace('/it-monitoring')} />
         <NavItem active label="Error Logs" icon={{ ios: 'exclamationmark.triangle.fill', android: 'warning', web: 'warning' }} />
-        <NavItem label="Maintenance" icon={{ ios: 'wrench.and.screwdriver.fill', android: 'build', web: 'build' }} onPress={() => router.replace('/maintenance-backup')} />
+        <NavItem label="Maintenance" icon={{ ios: 'wrench.and.screwdriver.fill', android: 'build', web: 'build' }} onPress={() => router.replace('/maintenance')} />
       </View>
       <ErrorCategoryModal
         category={popupCategory}

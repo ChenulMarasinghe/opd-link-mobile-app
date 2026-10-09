@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useAuth } from '@/context/AuthContext';
 import { ThemedText } from '@/components/themed-text';
 import { runSystemDiagnostics, type DiagnosticCheck, type DiagnosticsResult, type DiagnosticStatus } from '@/services/diagnosticsService';
 import { runMonitoringChecks, type MonitoringResult, type ServiceStatus } from '@/services/monitoringService';
@@ -25,6 +26,7 @@ const navigationItems = [
 
 export default function ITMonitoringScreen() {
   const insets = useSafeAreaInsets();
+  const { profile } = useAuth();
   const { runDiagnostics: runDiagnosticsParam } = useLocalSearchParams<{ runDiagnostics?: string }>();
   const [monitoring, setMonitoring] = useState<MonitoringResult | null>(null);
   const [diagnostics, setDiagnostics] = useState<DiagnosticsResult | null>(null);
@@ -60,7 +62,7 @@ export default function ITMonitoringScreen() {
     setDiagnosticsLoading(true);
     setDiagnosticsError(null);
     try {
-      setDiagnostics(await runSystemDiagnostics());
+      setDiagnostics(await runSystemDiagnostics(profile?.role));
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Diagnostics could not be started.';
       setDiagnosticsError(message);
@@ -68,13 +70,13 @@ export default function ITMonitoringScreen() {
     } finally {
       setDiagnosticsLoading(false);
     }
-  }, [diagnosticsLoading]);
+  }, [diagnosticsLoading, profile?.role]);
 
   useEffect(() => {
-    if (runDiagnosticsParam === '1' && !diagnostics && !diagnosticsLoading) {
+    if (runDiagnosticsParam === '1' && profile?.role === 'it' && !diagnostics && !diagnosticsLoading) {
       void runDiagnostics();
     }
-  }, [diagnostics, diagnosticsLoading, runDiagnostics, runDiagnosticsParam]);
+  }, [diagnostics, diagnosticsLoading, profile?.role, runDiagnostics, runDiagnosticsParam]);
 
   const status = monitoring?.overallStatus;
   const statusTitle = status === 'critical' ? 'Critical System Alert' : status === 'warning' ? 'System Warning' : status === 'operational' ? 'All Systems Operational' : 'Checking System Status';
@@ -139,7 +141,7 @@ export default function ITMonitoringScreen() {
           <Pressable
             accessibilityRole="button"
             accessibilityState={{ disabled: diagnosticsLoading }}
-            disabled={diagnosticsLoading}
+            disabled={diagnosticsLoading || profile?.role !== 'it'}
             onPress={() => void runDiagnostics()}
             style={({ pressed }) => [
               styles.diagnosticsButton,
@@ -156,6 +158,11 @@ export default function ITMonitoringScreen() {
           </Pressable>
 
           {diagnosticsError ? <ThemedText style={styles.diagnosticsError}>{diagnosticsError}</ThemedText> : null}
+          {profile?.role !== 'it' ? (
+            <ThemedText style={styles.diagnosticsError}>
+              Only authorized IT Supporters can run diagnostics.
+            </ThemedText>
+          ) : null}
           {diagnostics ? (
             <View style={styles.diagnosticResults}>
               <DiagnosticRow label="Backend Server" check={diagnostics.backend} />
@@ -214,7 +221,7 @@ export default function ITMonitoringScreen() {
             onPress={() => {
               if (item.label === 'Dashboard') router.replace('/it-dashboard');
               if (item.label === 'Error Logs') router.replace('/error-logs');
-              if (item.label === 'Maintenance') router.replace('/maintenance-backup');
+              if (item.label === 'Maintenance') router.replace('/maintenance');
             }}
             style={styles.navItem}>
             <SymbolView name={{ ios: item.ios, android: item.android, web: item.web }} size={16} tintColor={item.label === 'Monitoring' ? '#10C995' : '#A5B3C7'} />

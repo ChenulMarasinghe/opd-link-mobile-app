@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View,
@@ -261,3 +262,16 @@ const styles = StyleSheet.create({
   opensTomorrow: { fontSize: 14, color: "#EF4444" },
   empty: { color: "#6B7280", textAlign: "center", marginVertical: 12 },
 });
+=======
+import { Text, View } from "react-native";
+import LogoutButton from "../../components/LogoutButton";
+
+export default function Screen() {
+  return (
+    <View style={{ flex: 1, justifyContent: "center", alignItems: "center", padding: 24 }}>
+      <Text>patient-dashboard (placeholder)</Text>
+      <LogoutButton />
+    </View>
+  );
+}
+>>>>>>> parent of 1bdecc6 (refactor: structure app around IT screens)
