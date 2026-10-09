@@ -4,7 +4,11 @@ import { logoutUser } from "../services/auth";
 
 export default function LogoutButton() {
   const onLogout = async () => {
+<<<<<<< HEAD
     await logoutUser();
+=======
+    await logout();
+>>>>>>> parent of a5adae6 (remove login)
     router.replace("/login");
   };
 
