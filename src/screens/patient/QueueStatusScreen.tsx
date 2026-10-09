@@ -22,6 +22,13 @@ const formatWait = (min: number) => {
 const clock = (d: Date) =>
   d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
+function queueStatusPresentation(status?: QueueDoc['status']) {
+  if (status === 'in_progress') return { label: 'In progress', color: '#15803D', backgroundColor: '#DCFCE7' };
+  if (status === 'paused') return { label: 'Paused', color: '#B45309', backgroundColor: '#FEF3C7' };
+  if (status === 'over' || status === 'closed') return { label: 'Ended', color: '#4B5563', backgroundColor: '#E5E7EB' };
+  return { label: 'Waiting', color: '#1D4ED8', backgroundColor: '#DBEAFE' };
+}
+
 export default function QueueStatusScreen() {
   const { user } = useAuth();
   const params = useLocalSearchParams<{ id?: string; returnTo?: string; returnId?: string }>();
@@ -29,7 +36,7 @@ export default function QueueStatusScreen() {
 
   const [all, setAll] = useState<QueueAppointment[] | null>(null);
   const [queue, setQueue] = useState<QueueDoc | null>(null);
-  const [queueLoaded, setQueueLoaded] = useState(false);
+  const [queueLoadedDoctorId, setQueueLoadedDoctorId] = useState<string | undefined>();
   const [delay, setDelay] = useState<DelayDoc | null>(null);
   const [updated, setUpdated] = useState<Date | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -62,19 +69,19 @@ export default function QueueStatusScreen() {
 
   const appt = params.id ? todays.find((a) => a.id === params.id) ?? null : null;
   const doctorId = appt?.doctorId;
+  const queueLoaded = queueLoadedDoctorId === doctorId;
 
   // live queue + delay for the selected appointment's doctor
   useEffect(() => {
     if (!doctorId) return;
-    setQueueLoaded(false);
     const u1 = subscribeQueue(
-      doctorId, today,
-      (q) => { setQueue(q); setQueueLoaded(true); setUpdated(new Date()); },
-      () => { setQueue(null); setQueueLoaded(true); }
+      doctorId, today, appt?.session,
+      (q) => { setQueue(q); setQueueLoadedDoctorId(doctorId); setUpdated(new Date()); },
+      () => { setQueue(null); setQueueLoadedDoctorId(doctorId); }
     );
     const u2 = subscribeDelay(doctorId, setDelay);
     return () => { u1(); u2(); };
-  }, [doctorId, today]);
+  }, [doctorId, today, appt?.session]);
 
   // ---- derived values ----
   const myToken = appt?.tokenNumber;
@@ -86,13 +93,18 @@ export default function QueueStatusScreen() {
   let phase: Phase = "waiting";
   if (!myToken) phase = "noToken";
   else if (!queue) phase = "notStarted";
+  else if (queue.status === "over") phase = "passed";
   else if (myToken === current) phase = "now";
   else if (myToken < current) phase = "passed";
 
   const ahead = myToken && phase === "waiting" ? Math.max(0, myToken - current - 1) : 0;
   const estimate = phase === "waiting" ? (ahead + 1) * avg + delayMin : 0;
-  const nextToken =
-    queue && (queue.lastToken == null || current + 1 <= queue.lastToken) ? current + 1 : null;
+  const queuePresentation = queueStatusPresentation(queue?.status);
+  const nextToken = queue?.nextToken !== undefined
+    ? queue.nextToken
+    : queue && (queue.maxToken ?? queue.lastToken) != null && current + 1 <= (queue.maxToken ?? queue.lastToken)!
+      ? current + 1
+      : null;
 
   // create a notification once when the turn is close
   useEffect(() => {
@@ -106,7 +118,7 @@ export default function QueueStatusScreen() {
     if (!doctorId) return;
     try {
       setRefreshing(true);
-      setQueue(await fetchQueueOnce(doctorId, today));
+      setQueue(await fetchQueueOnce(doctorId, today, appt?.session));
       setUpdated(new Date());
     } catch {
       Alert.alert("Could not refresh", "Check your connection and try again.");
@@ -177,7 +189,13 @@ export default function QueueStatusScreen() {
   }
 
   const banner: { text: string; color: string; bg: string } | null =
-    phase === "now"
+    (queue?.status === "over" || queue?.status === "closed")
+      ? { text: "This queue is over for today.", color: "#374151", bg: "#E5E7EB" }
+      : queue?.status === "paused"
+      ? { text: "The queue is paused for now.", color: "#92400E", bg: "#FEF3C7" }
+      : queue?.status === "waiting"
+      ? { text: "The queue is waiting to start.", color: "#92400E", bg: "#FEF3C7" }
+      : phase === "now"
       ? { text: "It's your turn! Please go to the consultation room.", color: "#047857", bg: "#D1FAE5" }
       : phase === "passed"
       ? { text: "Your token has passed. Please ask the reception desk.", color: "#B91C1C", bg: "#FEE2E2" }
@@ -185,8 +203,6 @@ export default function QueueStatusScreen() {
       ? { text: "The queue has not started yet. Please wait for the doctor to begin.", color: "#92400E", bg: "#FEF3C7" }
       : phase === "noToken"
       ? { text: "Your token has not been assigned yet. Please ask the reception desk.", color: "#92400E", bg: "#FEF3C7" }
-      : queue?.status === "paused"
-      ? { text: "The queue is paused for now.", color: "#92400E", bg: "#FEF3C7" }
       : null;
 
   return (
@@ -198,9 +214,15 @@ export default function QueueStatusScreen() {
         <Text style={styles.specialty}>{appt.specialty}</Text>
         <Text style={styles.doctor}>{appt.doctorName}</Text>
         <Text style={styles.meta}>
-          {appt.timeSlot}{appt.roomNumber ? `  |  Room ${appt.roomNumber}` : ""}
+          {appt.timeSlot}{queue?.location || appt.roomNumber ? `  |  ${queue?.location ?? `Room ${appt.roomNumber}`}` : ""}
         </Text>
       </View>
+
+      {queue?.status && (
+        <View style={[styles.banner, { backgroundColor: queuePresentation.backgroundColor }]}>
+          <Text style={[styles.bannerText, { color: queuePresentation.color }]}>Queue: {queuePresentation.label}</Text>
+        </View>
+      )}
 
       {banner && (
         <View style={[styles.banner, { backgroundColor: banner.bg }]}>
@@ -267,7 +289,7 @@ export default function QueueStatusScreen() {
         </View>
       ) : (
         <Pressable style={styles.primaryBtn} onPress={onCheckIn}>
-          <Text style={styles.primaryText}>I'm here (check in)</Text>
+          <Text style={styles.primaryText}>I&apos;m here (check in)</Text>
         </Pressable>
       )}
 

@@ -21,7 +21,7 @@ import {
   updateDoctor,
 } from '@/services/adminService';
 import type { Doctor, ClinicWing } from '@/services/adminService';
-import { getTodayDateString, INITIAL_DOCTORS } from '@/services/mockData';
+import { getTodayDateString } from '@/services/mockData';
 
 const DAYS = ['M', 'T', 'W', 'T', 'F', 'S'];
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -74,10 +74,13 @@ export default function ManageOPD() {
 
   // Add Doctor Form
   const [doctorName, setDoctorName] = useState('');
+  const [specialty, setSpecialty] = useState('');
+  const [slotMinutes, setSlotMinutes] = useState('15');
+  const [unavailableDatesText, setUnavailableDatesText] = useState('');
   const [hospital, setHospital] = useState('Colombo National Hospital');
   const [selectedDepartment, setSelectedDepartment] = useState('General OPD');
-  const [room, setRoom] = useState(INITIAL_DOCTORS[0]?.room ?? '');
-  const [maxTokens, setMaxTokens] = useState('40');
+  const [room, setRoom] = useState('');
+  const [maxTokens, setMaxTokens] = useState('100');
   const [consultingStartDate, setConsultingStartDate] = useState(getTodayDateString());
   const [selectedShift, setSelectedShift] = useState<'Morning' | 'Evening' | 'Full Day'>('Morning');
   const [selectedSlots, setSelectedSlots] = useState<string[]>(SLOT_PRESETS.Morning);
@@ -94,10 +97,7 @@ export default function ManageOPD() {
     };
   }, []);
 
-  const rosterDoctors = useMemo(
-    () => (doctors.length > 0 ? doctors : INITIAL_DOCTORS),
-    [doctors]
-  );
+  const rosterDoctors = doctors;
   const activeClinics = useMemo(
     () => clinics.filter((clinic) => clinic.active),
     [clinics]
@@ -138,6 +138,7 @@ export default function ManageOPD() {
         .filter((doctor) => doctor.active && doctor.department === department)
         .map((doctor) => doctor.room)
     )];
+    if (rooms.length === 0) rooms.push('Unassigned');
     if (editingDoctor && editingDoctor.department === department && !rooms.includes(editingDoctor.room)) {
       return [...rooms, editingDoctor.room];
     }
@@ -145,6 +146,7 @@ export default function ManageOPD() {
   }, [department, editingDoctor, rosterDoctors, selectedClinic]);
   const maxTokenLimit = useMemo(() => selectedClinic?.maxDailyTokens ??
     Math.max(
+      100,
       0,
       ...rosterDoctors
         .filter((doctor) => doctor.active && doctor.department === department)
@@ -162,7 +164,7 @@ export default function ManageOPD() {
       ? departmentDays
       : editingDoctor && editingDoctor.department === department
         ? editingDoctor.consultingDays
-        : [];
+        : DAY_LABELS;
     return [...new Set(days
       .map((day) => DAY_LABELS.indexOf(day))
       .filter((index) => index >= 0))];
@@ -198,7 +200,7 @@ export default function ManageOPD() {
           .filter((doctor) => doctor.active && doctor.department === value)
           .map((doctor) => doctor.maxTokens)
       );
-    setRoom(availableRooms[0] ?? '');
+    setRoom(availableRooms[0] ?? 'Unassigned');
     setMaxTokens(tokenLimit > 0 ? String(Math.min(40, tokenLimit)) : '');
     const dayOptions = clinic?.operatingDays?.length
       ? clinic.operatingDays
@@ -210,6 +212,7 @@ export default function ManageOPD() {
       .filter((index) => index >= 0))];
     const weekdays = [0, 1, 2, 3, 4].filter((day) => allowedDays.includes(day));
     setSelectedDays(weekdays.length > 0 ? weekdays : allowedDays);
+    setSelectedSlots(clinic?.sessions?.length ? clinic.sessions : SLOT_PRESETS.Morning);
     setShowRoomPicker(false);
   };
 
@@ -217,13 +220,16 @@ export default function ManageOPD() {
     const initialDepartment = departmentOptions[0] ?? '';
     setEditingDoctor(null);
     setDoctorName('');
+    setSpecialty('');
+    setSlotMinutes('15');
+    setUnavailableDatesText('');
     setHospital('Colombo National Hospital');
     setSelectedDepartment(initialDepartment);
     handleDepartmentSelect(initialDepartment);
-    setMaxTokens('40');
+    setMaxTokens('100');
     setConsultingStartDate(getTodayDateString());
     setSelectedShift('Morning');
-    setSelectedSlots(SLOT_PRESETS.Morning);
+    setSelectedSlots(activeClinics[0]?.sessions?.length ? activeClinics[0].sessions : SLOT_PRESETS.Morning);
     setSelectedDays([0, 1, 2, 3, 4]);
     setView('addDoctor');
   };
@@ -231,6 +237,9 @@ export default function ManageOPD() {
   const startEditingDoctor = useCallback((doctor: Doctor) => {
     setEditingDoctor(doctor);
     setDoctorName(doctor.name);
+    setSpecialty(doctor.specialty || doctor.department);
+    setSlotMinutes(String(doctor.slotMinutes ?? 15));
+    setUnavailableDatesText((doctor.unavailableDates ?? []).join(', '));
     setHospital(doctor.hospital ?? '');
     setSelectedDepartment(doctor.department);
     setRoom(doctor.room);
@@ -260,6 +269,8 @@ export default function ManageOPD() {
 
   const handleSaveDoctor = async () => {
     const parsedMaxTokens = Number(maxTokens);
+    const parsedSlotMinutes = Number(slotMinutes);
+    const unavailableDates = unavailableDatesText.split(',').map((date) => date.trim()).filter(Boolean);
     if (doctorName.trim().length < 3) {
       Alert.alert('Validation', 'Enter the doctor’s name.');
       return;
@@ -291,6 +302,14 @@ export default function ManageOPD() {
       Alert.alert('Validation', 'Enter a valid consulting start date in YYYY-MM-DD format.');
       return;
     }
+    if (!Number.isInteger(parsedSlotMinutes) || parsedSlotMinutes < 5 || parsedSlotMinutes > 120) {
+      Alert.alert('Validation', 'Slot length must be a whole number from 5 to 120 minutes.');
+      return;
+    }
+    if (unavailableDates.some((date) => !isValidDate(date))) {
+      Alert.alert('Validation', 'Unavailable dates must use YYYY-MM-DD format.');
+      return;
+    }
     if (
       consultingStartDate < getTodayDateString() &&
       consultingStartDate !== editingDoctor?.consultingStartDate
@@ -316,6 +335,10 @@ export default function ManageOPD() {
         department,
         hospital: hospital.trim(),
         room: selectedRoom,
+        roomNumber: selectedRoom,
+        specialty: specialty.trim() || department,
+        slotMinutes: parsedSlotMinutes,
+        unavailableDates,
         maxTokens: parsedMaxTokens,
         consultingSlots: selectedSlots,
         consultingDays: selectedDays.map((i) => DAY_LABELS[i]),
@@ -380,6 +403,31 @@ export default function ManageOPD() {
                 value={doctorName}
                 onChangeText={setDoctorName}
               />
+              <Text style={styles.fieldLabel}>Specialty</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. Consultant Physician"
+                placeholderTextColor="#C4C9D4"
+                value={specialty}
+                onChangeText={setSpecialty}
+              />
+              <Text style={styles.fieldLabel}>Appointment Slot Length (minutes)</Text>
+              <TextInput
+                style={styles.input}
+                keyboardType="number-pad"
+                value={slotMinutes}
+                onChangeText={setSlotMinutes}
+              />
+              <Text style={styles.fieldLabel}>Unavailable Dates</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="2026-10-08, 2026-10-22"
+                placeholderTextColor="#C4C9D4"
+                value={unavailableDatesText}
+                onChangeText={setUnavailableDatesText}
+                autoCapitalize="none"
+              />
+              <Text style={styles.helperText}>Separate dates with commas. Leave blank if there are none.</Text>
               <Text style={styles.fieldLabel}>Hospital</Text>
               <TextInput
                 style={styles.input}
@@ -867,7 +915,7 @@ export default function ManageOPD() {
                 <Text style={styles.clinicSub}>
                   {clinic.rooms || 'No rooms assigned'} •{' '}
                   {
-                    (doctors.length > 0 ? doctors : INITIAL_DOCTORS).filter((doctor) =>
+                    doctors.filter((doctor) =>
                       clinic.clinicHead
                         ? doctor.name === clinic.clinicHead
                         : doctor.department.toLowerCase() === clinic.name.toLowerCase()
@@ -941,7 +989,10 @@ function AddClinicWingScreen({
   const [rooms, setRooms] = useState(wing?.rooms ?? '');
   const [maxTokens, setMaxTokens] = useState(String(wing?.maxDailyTokens ?? 50));
   const [clinicHead, setClinicHead] = useState(wing?.clinicHead ?? '');
-  const [wingActive, setWingActive] = useState(wing?.active ?? true);
+  const [wingActive, setWingActive] = useState(wing ? wing.closedToday !== true : true);
+  const [sessionsText, setSessionsText] = useState((wing?.sessions?.length
+    ? wing.sessions
+    : ['08:00-12:00', '13:00-17:00']).join(', '));
   const [selectedDays, setSelectedDays] = useState<number[]>(
     (wing?.operatingDays ?? DAY_LABELS)
       .map((day) => DAY_LABELS.indexOf(day))
@@ -960,12 +1011,13 @@ function AddClinicWingScreen({
 
   const handleSave = async () => {
     const parsedMaxTokens = Number(maxTokens);
-    if (!wingName.trim() || !building.trim() || !floor.trim() || !rooms.trim()) {
-      Alert.alert('Validation', 'Enter the wing name, building, floor, and allocated rooms.');
+    if (!wingName.trim()) {
+      Alert.alert('Validation', 'Enter the OPD name.');
       return;
     }
-    if (getRoomNumbers(rooms).length === 0) {
-      Alert.alert('Validation', 'Enter valid room numbers or a room range, such as Rooms 11 - 16.');
+    const sessions = sessionsText.split(',').map((item) => item.trim()).filter(Boolean);
+    if (sessions.length === 0 || sessions.some((session) => !/^\d{1,2}:\d{2}\s*-\s*\d{1,2}:\d{2}$/.test(session))) {
+      Alert.alert('Validation', 'Enter OPD sessions as 08:00-12:00, separated with commas.');
       return;
     }
     if (!Number.isInteger(parsedMaxTokens) || parsedMaxTokens < 1) {
@@ -994,6 +1046,8 @@ function AddClinicWingScreen({
         clinicHead: clinicHead.trim() || undefined,
         operatingDays: selectedDays.map((i) => DAY_LABELS[i]),
         active: wingActive,
+        closedToday: !wingActive,
+        sessions,
       };
       if (wing) {
         if (!wing.id) {
@@ -1050,6 +1104,17 @@ function AddClinicWingScreen({
                 onChangeText={setWingName}
               />
             </View>
+
+            <Text style={styles.fieldLabel}>OPD Sessions</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="08:00-12:00, 13:00-17:00"
+              placeholderTextColor="#C4C9D4"
+              value={sessionsText}
+              onChangeText={setSessionsText}
+              autoCapitalize="none"
+            />
+            <Text style={styles.helperText}>Use 24-hour time and separate sessions with commas.</Text>
 
             {/* Building & Floor */}
             <Text style={styles.fieldLabel}>
@@ -1196,7 +1261,7 @@ function AddClinicWingScreen({
                 accessibilityRole="switch"
                 accessibilityState={{ checked: wingActive }}
               >
-                <Text style={styles.statusToggleText}>{wingActive ? 'Active' : 'Inactive'}</Text>
+                <Text style={styles.statusToggleText}>{wingActive ? 'Open today' : 'Closed today'}</Text>
               </TouchableOpacity>
             </View>
           </View>

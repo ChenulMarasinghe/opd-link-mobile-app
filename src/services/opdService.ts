@@ -7,6 +7,7 @@ export interface OpdDepartment {
   closedToday: boolean | null;
   order: number;
   sessions: string[];
+  weeklySessions?: Record<string, string[]>;
 }
 
 export function toOpdDepartment(id: string, data: Record<string, unknown>): OpdDepartment | null {
@@ -24,6 +25,9 @@ export function toOpdDepartment(id: string, data: Record<string, unknown>): OpdD
     sessions: Array.isArray(data.sessions)
       ? data.sessions.filter((session): session is string => typeof session === 'string')
       : [],
+    weeklySessions: data.weeklySessions && typeof data.weeklySessions === 'object'
+      ? data.weeklySessions as Record<string, string[]>
+      : undefined,
   };
 }
 

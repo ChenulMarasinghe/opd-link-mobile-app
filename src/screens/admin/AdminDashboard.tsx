@@ -8,17 +8,15 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
-  subscribeDemoAppointments,
   subscribeAppointments,
   subscribeClinicWings,
   subscribeDoctors,
-  subscribeDemoQueues,
   subscribeQueues,
+  syncQueueMaxToken,
 } from '@/services/adminService';
 import type { Appointment, ClinicWing, Doctor, Queue } from '@/services/adminService';
 import {
   getTodayDateString,
-  INITIAL_DOCTORS,
 } from '@/services/mockData';
 
 const TODAY = getTodayDateString();
@@ -26,9 +24,7 @@ const TODAY = getTodayDateString();
 export default function AdminDashboard() {
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [queues, setQueues] = useState<Queue[]>([]);
-  const [demoQueues, setDemoQueues] = useState<Queue[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [demoAppointments, setDemoAppointments] = useState<Appointment[]>([]);
   const [clinicWings, setClinicWings] = useState<ClinicWing[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -38,29 +34,34 @@ export default function AdminDashboard() {
       setLoading(false);
     });
     const unsubQueues = subscribeQueues(TODAY, setQueues);
-    const unsubDemoQueues = subscribeDemoQueues(setDemoQueues);
     const unsubAppointments = subscribeAppointments(setAppointments);
-    const unsubDemoAppointments = subscribeDemoAppointments(setDemoAppointments);
     const unsubClinicWings = subscribeClinicWings(setClinicWings);
 
     return () => {
       unsubDoctors();
       unsubQueues();
-      unsubDemoQueues();
       unsubAppointments();
-      unsubDemoAppointments();
       unsubClinicWings();
     };
   }, []);
 
-  const getQueueForDoctor = (doctorId: string): Queue | undefined =>
-    queues.find((q) => q.doctorId === doctorId);
+  useEffect(() => {
+    queues.forEach((queue) => {
+      const maximum = appointments
+        .filter((appointment) => appointment.doctorId === queue.doctorId
+          && appointment.date === queue.date
+          && appointment.session === queue.session
+          && appointment.status !== 'cancelled')
+        .reduce((currentMaximum, appointment) => Math.max(currentMaximum, appointment.tokenNumber), 0);
+      if (maximum !== (queue.maxToken ?? 0)) {
+        syncQueueMaxToken(queue, maximum).catch((error) => {
+          console.warn('Failed to sync queue token count.', error);
+        });
+      }
+    });
+  }, [appointments, queues]);
 
-  const showingDemoDepartments = doctors.length === 0;
-  const dashboardAppointments = showingDemoDepartments
-    ? demoAppointments
-    : appointments;
-  const todayAppointments = dashboardAppointments.filter(
+  const todayAppointments = appointments.filter(
     (appointment) => appointment.date === TODAY && appointment.status !== 'cancelled'
   );
   const patientsInQueue = todayAppointments.filter(
@@ -78,47 +79,38 @@ export default function AdminDashboard() {
     },
     {
       label: 'Doctors',
-      value: String(showingDemoDepartments ? INITIAL_DOCTORS.length : doctors.length),
+      value: String(doctors.length),
     },
   ];
 
-  const sampleQueues = showingDemoDepartments ? demoQueues : [];
-  const dashboardDoctors = showingDemoDepartments ? INITIAL_DOCTORS : doctors;
-  const dashboardQueues = showingDemoDepartments
-    ? sampleQueues
-    : queues;
-  const liveDepartments = dashboardDoctors.map((doctor) => {
-    const department = doctor.department;
-    const queue =
-      dashboardQueues.find((item) => item.doctorId === doctor.id) ??
-      (showingDemoDepartments
-        ? sampleQueues.find((item) => item.doctorId === doctor.id)
-        : getQueueForDoctor(doctor.id ?? ''));
-    const currentToken = queue?.currentToken ?? 0;
-    const nextToken = currentToken + 1;
+  const liveDepartments = queues.map((queue) => {
+    const doctor = doctors.find((item) => item.id === queue.doctorId);
+    const nextToken = queue.nextToken ?? null;
     const nextAppointment = patientsInQueue.find(
       (appointment) =>
-        appointment.doctorId === doctor.id &&
+        appointment.doctorId === queue.doctorId &&
+        appointment.session === queue.session &&
         appointment.tokenNumber === nextToken
     );
     const nextPatient =
       nextAppointment?.patientName ??
-      (queue?.nextTokenNumber === nextToken ? queue.nextPatientName || undefined : undefined) ??
+      (queue.nextToken === nextToken ? queue.nextPatientName || undefined : undefined) ??
       'No patient assigned';
 
     return {
-      doctorId: doctor.id ?? `${department}-${doctor.name}`,
-      name: department,
-      doctorName: doctor.name,
-      room: doctor.room,
-      currentToken,
+      doctorId: queue.id ?? `${queue.doctorId}-${queue.date}-${queue.session}`,
+      name: queue.opdName ?? doctor?.department ?? 'OPD',
+      doctorName: doctor?.name ?? queue.doctorName ?? 'Doctor',
+      room: queue.location ?? doctor?.room ?? '',
+      session: queue.session ?? '',
+      currentToken: queue.currentToken,
       nextToken,
       nextPatient,
-      status: queue?.status ?? 'active',
+      status: queue.status,
     };
   });
 
-  const activeCount = liveDepartments.filter((department) => department.status === 'active').length;
+  const activeCount = liveDepartments.filter((department) => department.status === 'in_progress').length;
 
   if (loading) {
     return (
@@ -171,11 +163,11 @@ export default function AdminDashboard() {
             </View>
           ) : (
             liveDepartments.map((department) => {
-              const isBreak = department.status === 'break';
-              const isUpcoming = department.status === 'upcoming';
-              const statusStyle = isBreak
+              const isPaused = department.status === 'paused';
+              const isWaiting = department.status === 'waiting';
+              const statusStyle = isPaused
                 ? styles.statusBreak
-                : isUpcoming
+                : isWaiting
                   ? styles.statusUpcoming
                   : styles.statusActive;
 
@@ -184,19 +176,19 @@ export default function AdminDashboard() {
                   <View style={styles.cardTopLine}>
                     <Text style={styles.departmentName}>{department.name}</Text>
                     <Text style={[styles.statusPill, statusStyle]}>
-                      {isBreak ? 'Break' : isUpcoming ? 'Upcoming' : 'Now Serving'}
+                      {department.status?.replace('_', ' ') ?? 'waiting'}
                     </Text>
                   </View>
 
                   <View style={styles.cardMiddleLine}>
                     <Text style={styles.doctorText}>
-                      {department.doctorName} • {department.room}
+                      {department.doctorName} • {department.room} • {department.session}
                     </Text>
                     <Text style={styles.servingNumber}>#{department.currentToken}</Text>
                   </View>
 
                   <Text style={styles.nextLine}>
-                    Next patient: #{department.nextToken} • {department.nextPatient}
+                    Next patient: #{department.nextToken ?? '—'} • {department.nextPatient}
                   </Text>
                 </View>
               );
@@ -207,22 +199,18 @@ export default function AdminDashboard() {
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Clinic Wings</Text>
           <Text style={styles.sectionMeta}>
-            {clinicWings.filter((wing) => wing.active).length} Active
+            {clinicWings.length} OPDs
           </Text>
         </View>
         <View style={styles.departmentList}>
-          {clinicWings.filter((wing) => wing.active).map((wing) => (
+          {clinicWings.map((wing) => (
             <View key={wing.id ?? wing.name} style={styles.wingCard}>
               <View style={styles.cardTopLine}>
                 <Text style={styles.departmentName}>{wing.name}</Text>
-                <Text style={[styles.statusPill, styles.statusActive]}>Active</Text>
+                <Text style={[styles.statusPill, wing.closedToday ? styles.statusBreak : styles.statusActive]}>{wing.closedToday ? 'Closed today' : 'Open today'}</Text>
               </View>
               <Text style={styles.wingDetails}>
-                {[wing.building, wing.floor, wing.rooms].filter(Boolean).join(' • ')}
-              </Text>
-              <Text style={styles.wingDetails}>
-                {wing.maxDailyTokens} daily tokens
-                {wing.clinicHead ? ` • Head: ${wing.clinicHead}` : ''}
+                {wing.sessions?.join(' • ') ?? 'No sessions configured'}
               </Text>
             </View>
           ))}

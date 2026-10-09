@@ -136,13 +136,19 @@ export default function BookAppointmentScreen() {
   const selectedDateAllowed = selectedDateOption?.available === true;
   const isTodayClosed = selectedDate === getSriLankaDateTime().date
     && selectedDepartment?.closedToday !== false;
-  const sessionOptions = (selectedDepartment?.sessions || []).map((session) => {
-    const overlaps = getSessionOverlap(session, selectedDoctor);
+  const selectedWeekday = selectedDate
+    ? new Intl.DateTimeFormat('en-US', { weekday: 'long', timeZone: 'UTC' }).format(new Date(`${selectedDate}T12:00:00Z`))
+    : '';
+  const departmentSessions = selectedDepartment?.weeklySessions
+    ? selectedDepartment.weeklySessions[selectedWeekday] ?? []
+    : selectedDepartment?.sessions || [];
+  const sessionOptions = departmentSessions.map((session) => {
+    const overlaps = getSessionOverlap(session, selectedDoctor, selectedDate);
     const sessionSlots = selectedDateAllowed && !isTodayClosed
-      ? generateAppointmentSlots(overlaps, selectedDate)
+      ? generateAppointmentSlots(overlaps, selectedDate, selectedDoctor?.slotMinutes ?? 15)
       : [];
     const nextSlot = !loadingSlots && !slotLoadError
-      ? getNextAvailableAppointmentTime(sessionSlots, bookedSlots)
+      ? getNextAvailableAppointmentTime(sessionSlots, bookedSlots, selectedDoctor?.slotMinutes ?? 15)
       : null;
     const disabledReason = isTodayClosed
       ? 'Closed today'
@@ -165,13 +171,13 @@ export default function BookAppointmentScreen() {
     (session) => session.value === selectedSession
   )?.overlaps || [];
   const availableSlots = selectedDateAllowed && !isTodayClosed
-    ? generateAppointmentSlots(selectedSessionOverlap, selectedDate)
+    ? generateAppointmentSlots(selectedSessionOverlap, selectedDate, selectedDoctor?.slotMinutes ?? 15)
     : [];
   const provisionalTimeSlot = selectedSession && !loadingSlots && !slotLoadError
-    ? getNextAvailableAppointmentTime(availableSlots, bookedSlots)
+    ? getNextAvailableAppointmentTime(availableSlots, bookedSlots, selectedDoctor?.slotMinutes ?? 15)
     : null;
   const provisionalEndTime = provisionalTimeSlot
-    ? formatTimeSlot((parseTimeSlot(provisionalTimeSlot) ?? 0) + 15)
+    ? formatTimeSlot((parseTimeSlot(provisionalTimeSlot) ?? 0) + (selectedDoctor?.slotMinutes ?? 15))
     : null;
 
   // 1. Fetch OPDs and doctors from Firestore on mount.

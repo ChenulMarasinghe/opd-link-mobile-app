@@ -10,10 +10,14 @@ export type QueueDoc = {
   doctorName?: string;
   date: string;
   currentToken: number;
-  nextToken?: number;
+  nextToken?: number | null;
   lastToken?: number;
+  maxToken?: number;
+  session?: string;
+  location?: string;
+  opdName?: string;
   avgMinutes?: number;
-  status?: "waiting" | "in_progress" | "paused" | "closed";
+  status?: "waiting" | "in_progress" | "paused" | "over" | "closed";
 };
 
 export type DelayDoc = {
@@ -27,35 +31,49 @@ export type DelayDoc = {
 export type QueueAppointment = Appointment & {
   tokenNumber?: number;
   checkedIn?: boolean;
+  session?: string;
 };
 
 export const queueDocId = (doctorId: string, date: string) => `${doctorId}_${date}`;
 
-const queueQuery = (doctorId: string, date: string) =>
-  query(
-    collection(db, "queues"),
-    where("doctorId", "==", doctorId),
-    where("date", "==", date)
-  );
+const normalizeSession = (value: unknown) => typeof value === 'string'
+  ? value.replace(/\s+/g, '').toLowerCase()
+  : '';
+
+const queueQuery = (doctorId: string, date: string) => query(
+  collection(db, "queues"),
+  where("doctorId", "==", doctorId),
+  where("date", "==", date),
+);
+
+const findMatchingQueue = (docs: { data: () => Record<string, unknown> }[], session?: string) => {
+  const matching = docs.filter((item) => !session || normalizeSession(item.data().session) === normalizeSession(session));
+  return matching[0] ?? (docs.length === 1 ? docs[0] : undefined);
+};
   
 // READ: live queue for a doctor on a date
 export function subscribeQueue(
   doctorId: string,
   date: string,
+  session: string | undefined,
   onData: (q: QueueDoc | null) => void,
   onError?: (e: Error) => void
 ) {
   return onSnapshot(
     queueQuery(doctorId, date),
-    (snap) => onData(snap.empty ? null : (snap.docs[0].data() as QueueDoc)),
+    (snap) => {
+      const match = findMatchingQueue(snap.docs, session);
+      onData(match ? (match.data() as QueueDoc) : null);
+    },
     (e) => onError?.(e)
   );
 }
 
 // READ: one-off fetch used by the Refresh button
-export async function fetchQueueOnce(doctorId: string, date: string) {
+export async function fetchQueueOnce(doctorId: string, date: string, session?: string) {
   const snap = await getDocs(queueQuery(doctorId, date));
-  return snap.empty ? null : (snap.docs[0].data() as QueueDoc);
+  const match = findMatchingQueue(snap.docs, session);
+  return match ? (match.data() as QueueDoc) : null;
 }
 
 // READ: today's newest delay announcement for the doctor (FR06)

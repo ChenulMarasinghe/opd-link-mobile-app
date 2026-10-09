@@ -9,6 +9,7 @@ import {
   serverTimestamp,
   FieldValue,
   Timestamp,
+  updateDoc,
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { createNotification } from './notificationService';
@@ -38,6 +39,8 @@ export interface Doctor {
   consultingStartDate?: string;
   consultingSlots?: string[];
   availableTimeSlots?: string[];
+  slotMinutes?: number;
+  unavailableDates?: string[];
 }
 
 export interface Appointment {
@@ -100,6 +103,9 @@ interface BookingSlotReservation extends BookedAppointmentTime {
   appointmentId: string;
 }
 
+const bookingCounterId = (doctorId: string, date: string, session: string) =>
+  `${doctorId}_${date}_${session.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+
 function toDoctor(id: string, data: Record<string, unknown>): Doctor {
   const department = typeof data.department === 'string' ? data.department : undefined;
   const toStringArray = (value: unknown): string[] | undefined =>
@@ -127,6 +133,8 @@ function toDoctor(id: string, data: Record<string, unknown>): Doctor {
       : undefined,
     consultingSlots: toStringArray(data.consultingSlots),
     availableTimeSlots: toStringArray(data.availableTimeSlots),
+    slotMinutes: typeof data.slotMinutes === 'number' && data.slotMinutes > 0 ? data.slotMinutes : 15,
+    unavailableDates: toStringArray(data.unavailableDates) ?? [],
   };
 }
 
@@ -175,9 +183,13 @@ export async function fetchBookedSlots(
       where('status', '==', 'confirmed')
     );
 
-    const [snapshot, counterSnapshot] = await Promise.all([
+    const [snapshot, counterSnapshots] = await Promise.all([
       getDocs(q),
-      getDoc(doc(db, 'bookingCounters', `${doctorId}_${date}`)),
+      getDocs(query(
+        collection(db, 'bookingCounters'),
+        where('doctorId', '==', doctorId),
+        where('date', '==', date),
+      )),
     ]);
     const confirmedAppointments = snapshot.docs.map((docSnap) => {
       const data = docSnap.data();
@@ -196,12 +208,8 @@ export async function fetchBookedSlots(
       }
       return { timeSlot: data.timeSlot, endTime: data.endTime };
     });
-    const rawReservations = counterSnapshot.exists()
-      ? counterSnapshot.data().reservedSlots ?? []
-      : [];
-    if (!Array.isArray(rawReservations)) {
-      throw new Error('Booking reservations are unavailable.');
-    }
+    const rawReservations = counterSnapshots.docs.flatMap((counter) => counter.data().reservedSlots ?? []);
+    if (!Array.isArray(rawReservations)) throw new Error('Booking reservations are unavailable.');
     const reservations: BookedAppointmentTime[] = rawReservations.map((reservation) => {
       if (
         !reservation
@@ -251,7 +259,7 @@ export async function createAppointment(
     const appointmentRef = doc(appointmentsRef);
     const doctorRef = doc(db, 'doctors', input.doctorId);
     const opdRef = doc(db, 'opds', input.opdId);
-    const counterRef = doc(db, 'bookingCounters', `${input.doctorId}_${input.date}`);
+    const counterRef = doc(db, 'bookingCounters', bookingCounterId(input.doctorId, input.date, input.session));
     const doctorDateQuery = query(
       appointmentsRef,
       where('doctorId', '==', input.doctorId),
@@ -317,7 +325,9 @@ export async function createAppointment(
       );
 
       const tokenNumbers: number[] = [];
-      allAppointmentData.forEach((appointment) => {
+      allAppointmentData
+        .filter((appointment) => appointment.session === input.session)
+        .forEach((appointment) => {
         const token = appointment.tokenNumber;
         if (typeof token !== 'number' || !Number.isSafeInteger(token) || token < 1) {
           throw new Error(
@@ -325,7 +335,7 @@ export async function createAppointment(
           );
         }
         tokenNumbers.push(token);
-      });
+        });
       const counterData = counterSnapshot.exists() ? counterSnapshot.data() : undefined;
       const lastToken = counterData?.lastToken;
       if (
@@ -360,8 +370,9 @@ export async function createAppointment(
       });
 
       const nextTimeSlot = getNextAvailableAppointmentTime(
-        generateAppointmentSlots(getSessionOverlap(input.session, doctor), input.date),
-        [...bookedAppointments, ...reservations]
+        generateAppointmentSlots(getSessionOverlap(input.session, doctor, input.date), input.date, doctor.slotMinutes ?? 15),
+        [...bookedAppointments, ...reservations],
+        doctor.slotMinutes ?? 15
       );
       if (!nextTimeSlot) {
         throw new Error('No appointments available for this session.');
@@ -375,7 +386,7 @@ export async function createAppointment(
       if (startMinute === null) {
         throw new Error('The next available appointment time is invalid.');
       }
-      const endTime = formatTimeSlot(startMinute + 15);
+      const endTime = formatTimeSlot(startMinute + (doctor.slotMinutes ?? 15));
       const nextReservation: BookingSlotReservation = {
         appointmentId: appointmentRef.id,
         timeSlot: nextTimeSlot,
@@ -427,6 +438,31 @@ export async function createAppointment(
       };
     });
 
+    try {
+      const queueSnapshot = await getDocs(query(
+        collection(db, 'queues'),
+        where('doctorId', '==', input.doctorId),
+        where('date', '==', input.date),
+        where('session', '==', input.session),
+      ));
+      await Promise.all(queueSnapshot.docs.map((queueDocument) => {
+        const existingMaximum = Number(queueDocument.data().maxToken) || 0;
+        const currentToken = Number(queueDocument.data().currentToken ?? 0);
+        return updateDoc(queueDocument.ref, {
+          maxToken: Math.max(existingMaximum, allocated.tokenNumber),
+          nextToken: currentToken < allocated.tokenNumber
+            ? currentToken + 1
+            : null,
+          ...(queueDocument.data().status === 'over' && allocated.tokenNumber > currentToken
+            ? { status: 'waiting' }
+            : {}),
+          updatedAt: serverTimestamp(),
+        });
+      }));
+    } catch (queueError) {
+      console.warn('Could not update queue capacity after booking.', queueError);
+    }
+
     // Notifications are side effects and only run after the atomic booking commits.
     try {
       await createNotification({
@@ -476,8 +512,21 @@ export async function cancelAppointment(appointmentId: string): Promise<void> {
       if (typeof doctorId !== 'string' || typeof date !== 'string') {
         throw new Error('Appointment details are invalid; cancellation was not completed.');
       }
-      const counterRef = doc(db, 'bookingCounters', `${doctorId}_${date}`);
-      const counterSnapshot = await transaction.get(counterRef);
+      const legacyCounterRef = doc(db, 'bookingCounters', `${doctorId}_${date}`);
+      let counterRef = legacyCounterRef;
+      let counterSnapshot = await transaction.get(legacyCounterRef);
+      if (typeof appointment.session === 'string' && appointment.session) {
+        const sessionCounterRef = doc(
+          db,
+          'bookingCounters',
+          bookingCounterId(doctorId, date, appointment.session)
+        );
+        const sessionCounterSnapshot = await transaction.get(sessionCounterRef);
+        if (sessionCounterSnapshot.exists()) {
+          counterRef = sessionCounterRef;
+          counterSnapshot = sessionCounterSnapshot;
+        }
+      }
 
       transaction.update(appointmentRef, {
         status: 'cancelled',

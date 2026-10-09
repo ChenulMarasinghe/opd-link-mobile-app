@@ -11,6 +11,9 @@ export interface DoctorSchedule {
   consultingDays?: unknown;
   consultingStartDate?: unknown;
   consultingSlots?: unknown;
+  weeklyConsultingSessions?: unknown;
+  unavailableDates?: unknown;
+  slotMinutes?: unknown;
 }
 
 export interface AppointmentDateOption {
@@ -148,6 +151,7 @@ export function getAppointmentDates(
       label,
       available: !!days
         && !hasInvalidStartDate
+        && !(Array.isArray(schedule?.unavailableDates) && schedule.unavailableDates.includes(fullDate))
         && (earliestDate === null || fullDate >= earliestDate)
         && days.includes(dayName.slice(0, 3).toLowerCase()),
     });
@@ -194,26 +198,38 @@ export function parseTimeRange(value: unknown): TimeRange | null {
   if (parts.length !== 2) return null;
 
   const start = parseClock(parts[0]);
-  const end = parseClock(parts[1]);
+  const parsedEnd = parseClock(parts[1]);
+  const end = parsedEnd === 0 && start !== null && start > 0 ? 24 * 60 : parsedEnd;
   if (start === null || end === null || end <= start) return null;
   return { start, end };
 }
 
-function getDoctorRanges(schedule: DoctorSchedule): TimeRange[] | null {
-  if (!Array.isArray(schedule.consultingSlots) || schedule.consultingSlots.length === 0) {
+function getDoctorRanges(schedule: DoctorSchedule, date?: string): TimeRange[] | null {
+  let rawSlots = schedule.consultingSlots;
+  if (date && schedule.weeklyConsultingSessions && typeof schedule.weeklyConsultingSessions === 'object') {
+    const weekday = getWeekday(date);
+    const dayName = weekday
+      ? { mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday', thu: 'Thursday', fri: 'Friday', sat: 'Saturday', sun: 'Sunday' }[weekday]
+      : undefined;
+    const weekly = schedule.weeklyConsultingSessions as Record<string, unknown>;
+    rawSlots = dayName ? weekly[dayName] ?? weekly[weekday!] : undefined;
+  }
+  if (!Array.isArray(rawSlots) || rawSlots.length === 0) {
+    if (date && schedule.weeklyConsultingSessions && typeof schedule.weeklyConsultingSessions === 'object') return [];
     return null;
   }
-  const ranges = schedule.consultingSlots.map(parseTimeRange);
+  const ranges = rawSlots.map(parseTimeRange);
   const validRanges = ranges.filter((range): range is TimeRange => range !== null);
   return validRanges.length === ranges.length ? validRanges : null;
 }
 
 export function getSessionOverlap(
   session: unknown,
-  schedule: DoctorSchedule | null
+  schedule: DoctorSchedule | null,
+  date?: string,
 ): TimeRange[] {
   const sessionRange = parseTimeRange(session);
-  const doctorRanges = schedule ? getDoctorRanges(schedule) : null;
+  const doctorRanges = schedule ? getDoctorRanges(schedule, date) : null;
   if (!sessionRange || !doctorRanges) return [];
 
   return doctorRanges
@@ -238,20 +254,23 @@ export function parseTimeSlot(value: unknown): number | null {
 
 export function getNextAvailableAppointmentTime(
   slots: string[],
-  bookedAppointments: BookedAppointmentTime[]
+  bookedAppointments: BookedAppointmentTime[],
+  slotMinutes = SLOT_MINUTES
 ): string | null {
   const bookedRanges: TimeRange[] = [];
   for (const { timeSlot, endTime } of bookedAppointments) {
     const start = parseTimeSlot(timeSlot);
-    const end = parseTimeSlot(endTime);
-    if (start === null || end === null || end <= start) return null;
+    const parsedEnd = parseTimeSlot(endTime);
+    if (start === null || parsedEnd === null) return null;
+    const end = parsedEnd === 0 && start > 0 ? 24 * 60 : parsedEnd;
+    if (end <= start) return null;
     bookedRanges.push({ start, end });
   }
 
   return slots.find((slot) => {
     const start = parseTimeSlot(slot);
     if (start === null) return false;
-    const end = start + SLOT_MINUTES;
+    const end = start + slotMinutes;
     return !bookedRanges.some((booked) => start < booked.end && end > booked.start);
   }) || null;
 }
@@ -259,13 +278,14 @@ export function getNextAvailableAppointmentTime(
 export function generateAppointmentSlots(
   overlaps: TimeRange[],
   date: string,
+  slotMinutes = SLOT_MINUTES,
   now = new Date()
 ): string[] {
   const sriLankaNow = getSriLankaDateTime(now);
   const slots = new Set<string>();
 
   overlaps.forEach((range) => {
-    for (let start = range.start; start + SLOT_MINUTES <= range.end; start += SLOT_MINUTES) {
+    for (let start = range.start; start + slotMinutes <= range.end; start += slotMinutes) {
       if (date === sriLankaNow.date && start <= sriLankaNow.minuteOfDay) continue;
       slots.add(formatTimeSlot(start));
     }
@@ -286,6 +306,7 @@ export function isAppointmentDateAllowed(
   const days = getDoctorDays(schedule);
   const consultingStartDate = schedule.consultingStartDate;
   return !!days
+    && !(Array.isArray(schedule.unavailableDates) && schedule.unavailableDates.includes(date))
     && (
       consultingStartDate === undefined
       || consultingStartDate === null
@@ -304,10 +325,13 @@ export function isSlotInsideSchedule(
   if (!isAppointmentDateAllowed(schedule, date, now)) return false;
   const slotStart = parseTimeSlot(timeSlot);
   if (slotStart === null) return false;
+  const slotMinutes = typeof schedule.slotMinutes === 'number' && schedule.slotMinutes > 0
+    ? schedule.slotMinutes
+    : SLOT_MINUTES;
 
-  return getSessionOverlap(session, schedule).some((range) =>
+  return getSessionOverlap(session, schedule, date).some((range) =>
     slotStart >= range.start
-    && slotStart + SLOT_MINUTES <= range.end
+    && slotStart + slotMinutes <= range.end
     && !(date === getSriLankaDateTime(now).date
       && slotStart <= getSriLankaDateTime(now).minuteOfDay)
   );
