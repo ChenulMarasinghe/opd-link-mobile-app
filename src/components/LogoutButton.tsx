@@ -8,6 +8,9 @@ export default function LogoutButton() {
     await logoutUser();
 =======
     await logout();
+<<<<<<< HEAD
+>>>>>>> parent of a5adae6 (remove login)
+=======
 >>>>>>> parent of a5adae6 (remove login)
     router.replace("/login");
   };
