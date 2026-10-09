@@ -29,7 +29,10 @@ export default function LogoutButton({
   const onLogout = async () => {
     await logout();
 <<<<<<< HEAD
+<<<<<<< HEAD
 >>>>>>> parent of 1bdecc6 (refactor: structure app around IT screens)
+=======
+>>>>>>> parent of a5adae6 (remove login)
 =======
 >>>>>>> parent of a5adae6 (remove login)
     router.replace("/login");
