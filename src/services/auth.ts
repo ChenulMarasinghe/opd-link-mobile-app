@@ -19,7 +19,7 @@ export type UserProfile = {
   emailVerified?: boolean;
 };
 
-// Registration always creates a patient. Admin and IT accounts are created in the Firebase console.
+// Registration always creates a patient.
 export async function registerUser(
   name: string,
   email: string,
